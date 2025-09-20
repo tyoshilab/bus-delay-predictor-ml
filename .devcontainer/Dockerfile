@@ -10,3 +10,4 @@ RUN pip install scikit-learn
 RUN pip install psycopg2-binary
 RUN pip install tensorflow
 RUN pip install ipykernel
+RUN pip install sqlalchemy

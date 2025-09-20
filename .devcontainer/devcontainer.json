@@ -9,7 +9,7 @@
   "runArgs": ["--name=ds-sandbox"],
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "esbenp.prettier-vscode", "cweijan.vscode-postgresql-client2"],
+      "extensions": ["ms-python.python", "esbenp.prettier-vscode", "cweijan.vscode-postgresql-client2", "ms-toolsai.jupyter"],
       "settings": {
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "ms-python.black-formatter",
