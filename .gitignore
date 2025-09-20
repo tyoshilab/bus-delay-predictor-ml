@@ -1,0 +1,83 @@
+# GTFS Project specific .gitignore
+
+# ===== 機密情報・認証ファイル =====
+.env
+*.env
+*secret*
+*password*
+*credentials*
+
+# ===== データファイル =====
+# 大容量データファイル
+*.csv
+!sample.csv
+!example.csv
+data/*.csv
+climate/*.csv
+GTFS/data/*.csv
+
+# GTFS公式データ
+gtfs/
+gtfs_data/
+*.zip
+
+# 気象データ
+weather_data/
+climate_data/
+weatherstats_*.csv
+
+# ===== 機械学習モデル =====
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+*.model
+models/
+checkpoints/
+delay_prediction_model.*
+
+# ===== 出力・結果ファイル =====
+output/
+results/
+figures/
+plots/
+*.png
+*.jpg
+*.pdf
+!docs/images/*.png
+
+# ===== ログファイル =====
+logs/
+*.log
+debug.log
+
+# ===== 一時ファイル =====
+tmp/
+temp/
+.tmp/
+*.tmp
+*.bak
+*.backup
+
+# ===== Python関連 =====
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+# Jupyter出力ファイルは除外（機密情報が含まれる可能性）
+*-checkpoint.ipynb
+
+# ===== 開発環境 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== OS関連 =====
+.DS_Store
+Thumbs.db
