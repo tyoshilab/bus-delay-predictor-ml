@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 class DelayRegressionModel:
     """重回帰による遅延予測モデルクラス"""
     
-    def __init__(self, model_type='linear', normalize_features=True):
+    def __init__(self, model_type='linear', normalize_features=True, feature_names=None):
         """
         Args:
             model_type (str): 使用するモデルタイプ
@@ -34,7 +34,7 @@ class DelayRegressionModel:
         self.model = None
         self.scaler = None
         self.poly_features = None
-        self.feature_names = None
+        self.feature_names = feature_names
         self.training_history = {}
         
     def _create_model(self, **kwargs):
@@ -136,7 +136,7 @@ class DelayRegressionModel:
         
         return self.model
     
-    def train_model(self, X_train, y_train, validation_split=0.2, 
+    def train_model(self, X_train, X_test, y_train, y_test, validation_split=0.2, 
                    perform_cv=True, cv_folds=5, **model_params):
         """
         モデルを訓練
@@ -158,46 +158,48 @@ class DelayRegressionModel:
         if self.model is None:
             self.build_model(**model_params)
         
-        # 特徴量前処理
-        X_processed = self.prepare_features(X_train)
+        # # 特徴量前処理
+        # X_processed = self.prepare_features(X_train)
         
-        # 目標変数の形状確認
-        if len(y_train.shape) > 1 and y_train.shape[1] > 1:
-            print(f"Multi-output target detected: {y_train.shape}")
-            # 多出力の場合は平均を取る（または最初の出力のみ使用）
-            y_processed = np.mean(y_train, axis=1) if y_train.shape[1] > 1 else y_train.flatten()
-        else:
-            y_processed = y_train.flatten()
+        # # 目標変数の形状確認
+        # if len(y_train.shape) > 1 and y_train.shape[1] > 1:
+        #     print(f"Multi-output target detected: {y_train.shape}")
+        #     # 多出力の場合は平均を取る（または最初の出力のみ使用）
+        #     y_processed = np.mean(y_train, axis=1) if y_train.shape[1] > 1 else y_train.flatten()
+        # else:
+        #     y_processed = y_train.flatten()
         
-        print(f"Training data shape: {X_processed.shape}")
-        print(f"Target data shape: {y_processed.shape}")
-        print(f"Feature names: {len(self.feature_names)} features")
+        # print(f"Training data shape: {X_processed.shape}")
+        # print(f"Target data shape: {y_processed.shape}")
+        # print(f"Feature names: {len(self.feature_names)} features")
         
-        # 訓練・検証データ分割
-        if validation_split > 0:
-            X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
-                X_processed, y_processed, 
-                test_size=validation_split, 
-                random_state=42
-            )
-        else:
-            X_train_split, y_train_split = X_processed, y_processed
-            X_val_split, y_val_split = None, None
-        
+        # # 訓練・検証データ分割
+        # if validation_split > 0:
+        #     X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
+        #         X_processed, y_processed, 
+        #         test_size=validation_split, 
+        #         random_state=42
+        #     )
+        # else:
+        #     X_train_split, y_train_split = X_processed, y_processed
+        #     X_val_split, y_val_split = None, None
+        X_processed = np.concatenate((X_train, X_test), axis=0)
+        y_processed = np.concatenate((y_train, y_test), axis=0)
+
         # モデル訓練
         print(f"\nTraining {self.model_type} model...")
-        self.model.fit(X_train_split, y_train_split)
+        self.model.fit(X_train, y_train)
         
         # 訓練結果の評価
-        train_pred = self.model.predict(X_train_split)
-        train_metrics = self._calculate_metrics(y_train_split, train_pred, "Training")
-        
+        train_pred = self.model.predict(X_train)
+        train_metrics = self._calculate_metrics(y_train, train_pred, "Training")
+
         # 検証データの評価
         val_metrics = {}
         if validation_split > 0:
-            val_pred = self.model.predict(X_val_split)
-            val_metrics = self._calculate_metrics(y_val_split, val_pred, "Validation")
-        
+            val_pred = self.model.predict(X_test)
+            val_metrics = self._calculate_metrics(y_test, val_pred, "Validation")
+
         # クロスバリデーション
         cv_metrics = {}
         if perform_cv:
