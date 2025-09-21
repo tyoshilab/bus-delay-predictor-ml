@@ -59,9 +59,13 @@ class DataAggregator:
 
         # 時間バケットで集約
         weather_aggregated = data.groupby('time_bucket').agg({
-            'weather': 'first',
             'temp': 'mean',
-            'precipitation': 'mean'
+            'precipitation': 'mean',
+            'humidex': 'mean',
+            'wind_speed': 'mean',
+            'weather_sunny': 'mean',
+            'weather_cloudy': 'mean',
+            'weather_rainy': 'mean'
         }).reset_index()
 
         return weather_aggregated

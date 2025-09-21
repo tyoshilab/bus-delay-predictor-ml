@@ -33,13 +33,20 @@ class WeatherDataRetriever:
             pressure_sea,
             wind_speed,
             visibility,
+            humidex_v as humidex,
             cloud_cover_8,
-            -- 天候状態の分類（論文に従って簡易的に分類）
             CASE 
-                WHEN cloud_cover_8 <= 2 THEN 1  -- 晴れ
-                WHEN cloud_cover_8 <= 6 THEN 4  -- 曇り
-                ELSE 10  -- 雨（雲量が多い場合を雨とみなす）
-            END as weather,
+                WHEN cloud_cover_8 <= 2 THEN 1
+                ELSE 0
+            END as weather_sunny,
+            CASE 
+                WHEN cloud_cover_8 > 2 and cloud_cover_8 <= 6 THEN 1
+                ELSE 0
+            END as weather_cloudy,
+            CASE 
+                WHEN cloud_cover_8 > 6 THEN 1
+                ELSE 0
+            END as weather_rainy,
             -- 降水量（実際のデータがない場合は相対湿度から推定）
             CASE 
                 WHEN relative_humidity > 90 AND cloud_cover_8 > 6 THEN 2.0
@@ -55,4 +62,5 @@ class WeatherDataRetriever:
         
         # タイムゾーン変換
         weather_data['datetime'] = pd.to_datetime(weather_data['datetime'], utc=True).dt.tz_convert('America/Vancouver')
+        
         return weather_data
