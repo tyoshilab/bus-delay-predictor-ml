@@ -18,18 +18,27 @@ class GTFSDataRetriever:
         """
         self.db_connector = db_connector
     
-    def get_gtfs_data(self, route_id='6612', start_date='20250818'):
+    def get_gtfs_data(self, route_id=['6612'], start_date='20250818'):
         """
         バンクーバー遅延予測用GTFSデータを取得
         
         Args:
-            route_id (str): 路線ID
+            route_id (str or list): 路線ID（単一文字列または複数IDのリスト）
             start_date (str): 開始日 (YYYYMMDD形式)
             
         Returns:
             pd.DataFrame: GTFSデータ
         """
-        gtfs_query = """
+        # route_idの正規化（文字列の場合はリストに変換）
+        if isinstance(route_id, str):
+            route_id_list = [route_id]
+        else:
+            route_id_list = route_id
+        
+        # IN句用のプレースホルダー作成
+        route_placeholders = ', '.join(['%(route_id_{})s'.format(i) for i in range(len(route_id_list))])
+        
+        gtfs_query = f"""
         WITH base_data AS (
             SELECT 
                 actual_arrival_time as datetime, 
@@ -66,7 +75,7 @@ class GTFSDataRetriever:
                 END as time_period_basic
                 
             FROM gtfs_realtime.gtfs_rt_stop_time_updates_mv
-            WHERE route_id = %(route_id)s
+            WHERE route_id IN ({route_placeholders})
               AND start_date >= %(start_date)s
               -- SQL側で明らかな異常値を事前除去
               AND arrival_delay IS NOT NULL
@@ -89,12 +98,15 @@ class GTFSDataRetriever:
         ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
         """
         
-        print(f"Retrieving Vancouver delay prediction GTFS data for route {route_id}...")
+        # パラメータ辞書の構築
+        params = {'start_date': start_date}
+        for i, rid in enumerate(route_id_list):
+            params[f'route_id_{i}'] = rid
         
-        gtfs_data = self.db_connector.read_sql(
-            gtfs_query, 
-            params={'route_id': route_id, 'start_date': start_date}
-        )
+        route_ids_str = ', '.join(route_id_list)
+        print(f"Retrieving Vancouver delay prediction GTFS data for routes: {route_ids_str}...")
+        
+        gtfs_data = self.db_connector.read_sql(gtfs_query, params=params)
         
         # タイムゾーン変換
         gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_convert('America/Vancouver')
