@@ -45,30 +45,6 @@ class DataStandardizer:
         X_2d = X.reshape(-1, X.shape[-1])
         X_scaled = self.feature_scaler.transform(X_2d)
         return X_scaled.reshape(original_shape)
-        
-    def transform_targets(self, y):
-        """
-        目標データの標準化
-        
-        Args:
-            y (np.array): 目標データ
-            
-        Returns:
-            np.array: 標準化済み目標データ
-        """
-        return self.target_scaler.transform(y.reshape(-1, 1)).flatten()
-        
-    def inverse_transform_targets(self, y_scaled):
-        """
-        目標データの逆標準化
-        
-        Args:
-            y_scaled (np.array): 標準化済み目標データ
-            
-        Returns:
-            np.array: 元のスケールの目標データ
-        """
-        return self.target_scaler.inverse_transform(y_scaled.reshape(-1, 1)).flatten()
     
     def fit_transform_features(self, X):
         """
@@ -84,15 +60,3 @@ class DataStandardizer:
         X_2d = X.reshape(-1, X.shape[-1])
         X_scaled = self.feature_scaler.fit_transform(X_2d)
         return X_scaled.reshape(original_shape)
-        
-    def fit_transform_targets(self, y):
-        """
-        目標データの学習と標準化を同時実行
-        
-        Args:
-            y (np.array): 目標データ
-            
-        Returns:
-            np.array: 標準化済み目標データ
-        """
-        return self.target_scaler.fit_transform(y.reshape(-1, 1)).flatten()

@@ -18,9 +18,73 @@ class SequenceCreator:
         """
         self.input_timesteps = input_timesteps
         self.output_timesteps = output_timesteps
+        
+        # ConvLSTM用の特徴量グループ定義
+        self.feature_groups = {
+            'temporal': ['hour_sin', 'hour_cos', 'day_sin', 'day_cos'],
+            'weather': ['weather', 'temp', 'precipitation'],
+            'target': ['arrival_delay']
+        }
+    
+    def organize_features_spatially(self, feature_cols):
+        """
+        ConvLSTMの畳み込み処理に適した特徴量の空間配置を作成
+        
+        Args:
+            feature_cols (list): 元の特徴量リスト
+            
+        Returns:
+            tuple: (再配置された特徴量リスト, グループ情報)
+        """
+        organized_features = []
+        group_info = {}
+        current_idx = 0
+        
+        print("=== Feature Spatial Organization for ConvLSTM ===")
+        
+        # グループ順序：時間 → 気象 → 目標変数
+        group_order = ['temporal', 'weather', 'target']
+        
+        for group_name in group_order:
+            group_features = []
+            start_idx = current_idx
+            
+            for feature in self.feature_groups[group_name]:
+                if feature in feature_cols:
+                    organized_features.append(feature)
+                    group_features.append(feature)
+                    current_idx += 1
+            
+            if group_features:
+                group_info[group_name] = {
+                    'features': group_features,
+                    'start_idx': start_idx,
+                    'end_idx': current_idx,
+                    'size': len(group_features)
+                }
+                print(f"{group_name.capitalize()} group: {group_features} (indices {start_idx}-{current_idx-1})")
+        
+        # グループに属さない特徴量を最後に追加
+        other_features = [f for f in feature_cols if f not in organized_features]
+        if other_features:
+            start_idx = current_idx
+            organized_features.extend(other_features)
+            group_info['other'] = {
+                'features': other_features,
+                'start_idx': start_idx,
+                'end_idx': current_idx + len(other_features),
+                'size': len(other_features)
+            }
+            print(f"Other features: {other_features} (indices {start_idx}-{current_idx + len(other_features)-1})")
+        
+        print(f"Total organized features: {len(organized_features)}")
+        print(f"Spatial arrangement: {organized_features}")
+        
+        return organized_features, group_info
     
     def create_route_direction_aware_sequences(self, data, target_col, feature_cols, 
-                                              route_col='route_id', direction_col='direction_id'):
+                                              route_col='route_id', direction_col='direction_id',
+                                              spatial_organization=True):
         """
         route_id + direction_id別の時系列シーケンスを作成
         
@@ -30,9 +94,10 @@ class SequenceCreator:
             feature_cols (list): 特徴量カラムリスト
             route_col (str): 路線IDカラム名
             direction_col (str): 方向IDカラム名
+            spatial_organization (bool): ConvLSTM用の空間配置を使用するか
             
         Returns:
-            tuple: (X配列, y配列, route_direction情報, 使用特徴量リスト)
+            tuple: (X配列, y配列, route_direction情報, 使用特徴量リスト, グループ情報)
         """
         X_all, y_all = [], []
         route_direction_info = []  # route_id + direction_id情報を保持
@@ -41,15 +106,24 @@ class SequenceCreator:
         print(f"Input time series length: {self.input_timesteps} hours")
         print(f"Prediction time series length: {self.output_timesteps} hours")
         print(f"Available features: {feature_cols}")
+        print(f"Spatial organization: {spatial_organization}")
         
-        # 利用可能な特徴量のフィルタリング
-        available_features = [col for col in feature_cols if col in data.columns]
-        missing_features = [col for col in feature_cols if col not in data.columns]
+        # 特徴量の空間配置（ConvLSTM用）
+        if spatial_organization:
+            organized_features, group_info = self.organize_features_spatially(feature_cols)
+            # 利用可能な特徴量のフィルタリング（空間配置順序を保持）
+            available_features = [col for col in organized_features if col in data.columns]
+            missing_features = [col for col in organized_features if col not in data.columns]
+        else:
+            # 従来の順序
+            available_features = [col for col in feature_cols if col in data.columns]
+            missing_features = [col for col in feature_cols if col not in data.columns]
+            group_info = None
         
         if missing_features:
             print(f"Warning: Missing features will be skipped: {missing_features}")
         
-        print(f"Using features: {available_features}")
+        print(f"Using features (in spatial order): {available_features}")
         
         # route_id + direction_idの組み合わせごとにシーケンスを作成
         total_sequences = 0
@@ -67,7 +141,7 @@ class SequenceCreator:
                 print(f"route_id {route_id}, direction_id {direction_id}: {len(route_direction_data)} records", end=" -> ")
                 
                 if len(route_direction_data) >= self.input_timesteps + self.output_timesteps:
-                    # 利用可能な特徴量のみを使用
+                    # 利用可能な特徴量のみを使用（空間配置順序）
                     try:
                         features = route_direction_data[available_features].values
                         
@@ -112,7 +186,12 @@ class SequenceCreator:
             print(f"y shape: {y_combined.shape}")
             print(f"Features used: {len(available_features)} out of {len(feature_cols)}")
             
-            return X_combined, y_combined, route_direction_info, available_features
+            if spatial_organization and group_info:
+                print(f"\n=== Spatial Organization Summary ===")
+                for group_name, info in group_info.items():
+                    print(f"{group_name.capitalize()}: {info['features']} (width indices {info['start_idx']}-{info['end_idx']-1})")
+            
+            return X_combined, y_combined, route_direction_info, available_features, group_info
         else:
             print("\nSequence creation failed")
-            return np.array([]), np.array([]), [], available_features
+            return np.array([]), np.array([]), [], available_features, group_info
