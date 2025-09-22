@@ -36,66 +36,122 @@ class DataPreprocessor:
         print(f"  {column}: Removed {removed_count} outliers using MAD method")
         return df[outlier_mask]
     
-    def generate_time_features(self, data):
-        data = data.copy()
+    def clean_gtfs_anomalies(df, delay_threshold_minutes=15):
+        """
+        GTFS異常値の検出とクリーニング
         
-        if 'hour_of_day' in data.columns:
-            data['hour_sin'] = np.sin(2 * np.pi * data['hour_of_day'] / 24)
-            data['hour_cos'] = np.cos(2 * np.pi * data['hour_of_day'] / 24)
+        Args:
+            df: GTFSデータフレーム
+            delay_threshold_minutes: 異常と判定する遅延時間の閾値（分）
+        """
+        # 異常な早着/遅延の検出
+        delay_threshold_seconds = delay_threshold_minutes * 60
         
-        if 'day_of_week' in data.columns:
-            data['day_sin'] = np.sin(2 * np.pi * data['day_of_week'] / 7)
-            data['day_cos'] = np.cos(2 * np.pi * data['day_of_week'] / 7)
-        
-        if 'hour_of_day' in data.columns:
-            data['time_period_detailed'] = pd.cut(
-                data['hour_of_day'],
-                bins=[0, 5, 7, 9, 12, 15, 18, 22, 24],
-                labels=['Late_Night', 'Early_Morning', 'Morning_Peak', 'Midday', 
-                        'Afternoon', 'Evening_Peak', 'Night', 'Late_Evening'],
-                right=False,
-                include_lowest=True
-            )
-        
-        if 'hour_of_day' in data.columns:
-            data['is_peak_hour'] = data['hour_of_day'].isin([7, 8, 17, 18])
-        
-        if 'day_of_week' in data.columns:
-            data['is_weekend'] = data['day_of_week'].isin([6, 7])
-        
-        return data
-    
-    def generate_statistical_features(self, data):
-        data = data.copy()
-        
-        required_cols = ['route_id', 'direction_id', 'hour_of_day', 'arrival_delay']
-        if not all(col in data.columns for col in required_cols):
-            return data
-        
-        agg_dict = {
-            'arrival_delay': ['mean', 'std', 'count']
-        }
-        
-        if 'travel_time_duration' in data.columns:
-            agg_dict['travel_time_duration'] = ['mean', 'std']
-        
-        route_stats = data.groupby(['route_id', 'direction_id', 'hour_of_day']).agg(agg_dict).round(3)
-        
-        if 'travel_time_duration' in data.columns:
-            route_stats.columns = ['delay_mean_by_route_hour', 'delay_std_by_route_hour', 'delay_count_by_route_hour',
-                                  'travel_mean_by_route_hour', 'travel_std_by_route_hour']
-        else:
-            route_stats.columns = ['delay_mean_by_route_hour', 'delay_std_by_route_hour', 'delay_count_by_route_hour']
-        
-        route_stats = route_stats.reset_index()
-        
-        data = data.merge(
-            route_stats, 
-            on=['route_id', 'direction_id', 'hour_of_day'],
-            how='left'
+        # 異常値フラグの作成
+        df['is_anomaly'] = (
+            (df['arrival_delay'] < -delay_threshold_seconds) |  # 大幅早着
+            (df['arrival_delay'] > delay_threshold_seconds * 2)  # 大幅遅延
         )
         
-        if 'delay_mean_by_route_hour' in data.columns:
-            data['delay_deviation'] = data['arrival_delay'] - data['delay_mean_by_route_hour']
+        # 時刻の逆転チェック
+        df['time_reversal'] = df['datetime'].diff() < pd.Timedelta(0)
         
-        return data
+        # 総合的な異常判定
+        df['should_exclude'] = (
+            df['is_anomaly'] | 
+            df['impossible_speed'] | 
+            df['time_reversal']
+        )
+        
+        return df
+    
+    def apply_graduated_filtering(df):
+        """
+        段階的フィルタリングの適用
+        """
+        # レベル1: 明らかな異常値を除外
+        level1_clean = df[~df['should_exclude']].copy()
+        
+        # レベル2: 統計的外れ値の検出
+        delay_mean = level1_clean['arrival_delay'].mean()
+        delay_std = level1_clean['arrival_delay'].std()
+        
+        level1_clean['is_outlier'] = np.abs(
+            (level1_clean['arrival_delay'] - delay_mean) / delay_std
+        ) > 3  # 3σ以上を外れ値とする
+        
+        level2_clean = level1_clean[~level1_clean['is_outlier']].copy()
+        
+        return level1_clean, level2_clean
+
+    def get_realistic_bus_thresholds(self):
+        """
+        バス運行の現実的な閾値設定
+        TransLinkの運行特性を考慮
+        """
+        return {
+            # 早着閾値（厳しく設定）
+            'early_threshold_minor': 120,      # 2分早着（軽微）
+            'early_threshold_major': 300,      # 5分早着（重大）
+            'early_threshold_severe': 600,     # 10分早着（異常）
+            
+            # 遅延閾値（現実的に設定）
+            'delay_threshold_minor': 300,      # 5分遅延（軽微）
+            'delay_threshold_major': 900,      # 15分遅延（重大）
+            'delay_threshold_severe': 1800,    # 30分遅延（異常）
+            
+            # 時間帯別調整係数
+            'rush_hour_multiplier': 1.5,       # ラッシュ時は1.5倍まで許容
+            'night_hour_multiplier': 0.8,      # 夜間は厳しく評価
+        }
+    
+    def clean_gtfs_with_asymmetric_thresholds(self, df):
+        """
+        非対称閾値を使用した現実的な異常値検出
+        """
+        df = df.copy()
+        thresholds = self.get_realistic_bus_thresholds()
+        df['hour_of_day'] = df['datetime'].dt.hour
+        
+        # 2. 時間帯の分類
+        df['is_rush_hour'] = df['hour_of_day'].isin([7, 8, 9, 17, 18, 19])
+        df['is_night_hour'] = df['hour_of_day'].isin([22, 23, 0, 1, 2, 3, 4, 5])
+        
+        # 3. 時間帯別閾値調整
+        df['delay_threshold_adjusted'] = thresholds['delay_threshold_major']
+        df['early_threshold_adjusted'] = thresholds['early_threshold_major']
+        
+        # ラッシュ時：遅延許容範囲を拡大
+        rush_mask = df['is_rush_hour']
+        df.loc[rush_mask, 'delay_threshold_adjusted'] *= thresholds['rush_hour_multiplier']
+        
+        # 夜間：両方向とも厳しく評価
+        night_mask = df['is_night_hour'] 
+        df.loc[night_mask, 'delay_threshold_adjusted'] *= thresholds['night_hour_multiplier']
+        df.loc[night_mask, 'early_threshold_adjusted'] *= thresholds['night_hour_multiplier']
+        
+        # 4. 非対称な異常値検出
+        df['is_minor_early'] = df['arrival_delay'] < -thresholds['early_threshold_minor']
+        df['is_major_early'] = df['arrival_delay'] < -df['early_threshold_adjusted']
+        df['is_severe_early'] = df['arrival_delay'] < -thresholds['early_threshold_severe']
+        
+        df['is_minor_delay'] = df['arrival_delay'] > thresholds['delay_threshold_minor']
+        df['is_major_delay'] = df['arrival_delay'] > df['delay_threshold_adjusted']
+        df['is_severe_delay'] = df['arrival_delay'] > thresholds['delay_threshold_severe']
+        
+        # 6. 総合的な異常判定（段階的）
+        df['anomaly_level'] = 0  # 正常
+        
+        # レベル1: 軽微な異常（データ保持、要注意）
+        df.loc[df['is_minor_early'] | df['is_minor_delay'], 'anomaly_level'] = 1
+        
+        # レベル2: 重大な異常（データ保持、重み調整）
+        df.loc[df['is_major_early'] | df['is_major_delay'], 'anomaly_level'] = 2
+        
+        # レベル3: 異常（除外推奨）
+        df.loc[df['is_severe_early'] | df['is_severe_delay'], 'anomaly_level'] = 3
+        
+        # 除外フラグ（レベル2以上除外）
+        df['should_exclude'] = df['anomaly_level'] >= 2
+        
+        return df

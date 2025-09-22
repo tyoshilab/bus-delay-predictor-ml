@@ -42,6 +42,7 @@ class GTFSDataRetriever:
         WITH base_data AS (
             SELECT 
                 actual_arrival_time as datetime, 
+                DATE_TRUNC('hour', actual_arrival_time) as datetime_60,
                 EXTRACT(isodow FROM start_date::date) as day_of_week,
                 stop_sequence as line_direction_link_order,
                 trip_id,
@@ -49,30 +50,14 @@ class GTFSDataRetriever:
                 start_date,
                 route_id,
                 direction_id,
-                
                 -- 区間所要時間計算（基本的な外れ値除去付き）
                 CASE  
                     WHEN LAG(actual_arrival_time) OVER (PARTITION BY start_date, route_id, trip_id ORDER BY stop_sequence) IS NOT NULL
                     THEN EXTRACT(EPOCH FROM (actual_arrival_time - LAG(actual_arrival_time) OVER (PARTITION BY start_date, route_id, trip_id ORDER BY stop_sequence)))
                     ELSE NULL
                 END as travel_time_raw_seconds,
-                
                 -- 遅延時間（予測目標）: 正=遅延、負=早着
-                arrival_delay,
-                
-                -- 基本的な時間特徴量をSQL側で生成
-                EXTRACT(hour FROM actual_arrival_time) as hour_of_day,
-                DATE_TRUNC('hour', actual_arrival_time) as datetime_60,
-                
-                -- 時間帯カテゴリの基本分類
-                CASE 
-                    WHEN EXTRACT(hour FROM actual_arrival_time) BETWEEN 0 AND 4 THEN 6  -- Late Night
-                    WHEN EXTRACT(hour FROM actual_arrival_time) BETWEEN 5 AND 7 THEN 1  -- Morning Peak
-                    WHEN EXTRACT(hour FROM actual_arrival_time) BETWEEN 8 AND 11 THEN 2  -- Daytime
-                    WHEN EXTRACT(hour FROM actual_arrival_time) BETWEEN 12 AND 15 THEN 3  -- Evening
-                    WHEN EXTRACT(hour FROM actual_arrival_time) BETWEEN 16 AND 18 THEN 4  -- Night Peak
-                    ELSE 5  -- Midnight
-                END as time_period_basic
+                arrival_delay
                 
             FROM gtfs_realtime.gtfs_rt_stop_time_updates_mv
             WHERE route_id IN ({route_placeholders})
