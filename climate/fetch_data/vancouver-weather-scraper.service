@@ -1,0 +1,20 @@
+[Unit]
+Description=Vancouver Weather Data Scraper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/workspace/GTFS
+Environment=PYTHONPATH=/workspace/GTFS
+ExecStart=/usr/local/bin/python /workspace/GTFS/climate/weather_scraper.py --mode schedule
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+# 環境変数ファイルの読み込み
+EnvironmentFile=-/workspace/GTFS/.env
+
+[Install]
+WantedBy=multi-user.target
