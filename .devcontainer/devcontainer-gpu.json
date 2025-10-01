@@ -1,15 +1,24 @@
 {
-  "name": "DS-sandbox (CPU)",
+  "name": "DS-sandbox (GPU)",
   "build": {
-    "dockerfile": "Dockerfile",
+    "dockerfile": "Dockerfile.gpu",
     "args": {
       "TZ": "${localEnv:TZ:America/Los_Angeles}"
     }
   },
   "runArgs": [
     "--name=ds-sandbox",
+    "--gpus=all",
     "--shm-size=2g"
   ],
+  "hostRequirements": {
+    "gpu": "optional"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/nvidia-cuda:1": {
+      "installCudnn": true
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -41,8 +50,9 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "python -c 'import tensorflow as tf; print(\"TensorFlow:\", tf.__version__); print(\"Running on CPU\")'",
+  "postCreateCommand": "python -c 'import tensorflow as tf; print(\"TensorFlow:\", tf.__version__); gpus = tf.config.list_physical_devices(\"GPU\"); print(\"GPUs available:\", len(gpus)); [print(f\"  - {gpu.name}\") for gpu in gpus]'",
   "remoteEnv": {
-    "TF_CPP_MIN_LOG_LEVEL": "1"
+    "TF_CPP_MIN_LOG_LEVEL": "1",
+    "CUDA_VISIBLE_DEVICES": "0"
   }
 }
