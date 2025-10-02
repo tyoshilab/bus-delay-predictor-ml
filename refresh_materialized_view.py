@@ -3,7 +3,6 @@
 Script to refresh materialized views in the database.
 """
 
-from sqlalchemy import text
 import logging
 from src.data_connection import DatabaseConnector
 
@@ -14,16 +13,16 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Starting materialized views refresh...")
     db_connector = DatabaseConnector()
-    
-    # Refresh materialized views
-    try:
-        with db_connector.engine.connect() as conn:
-            conn.execute(text("call gtfs_realtime.refresh_gtfs_views()"))
-            conn.commit()
+    # Show summary statistics
+    with db_connector.get_connection() as conn:
+        try:
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("call gtfs_realtime.refresh_gtfs_views()")
             logger.info("Materialized views refreshed successfully.")
 
-    except Exception as e:
-        logger.error(f"Error refreshing materialized views: {e}")
+        except Exception as e:
+            logger.error(f"Error refreshing views: {e}")
 
 if __name__ == "__main__":
     main()

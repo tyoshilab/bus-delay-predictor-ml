@@ -23,23 +23,27 @@ from src.data_preprocessing import DataPreprocessor, DataAggregator, FeatureEngi
 from src.timeseries_processing import SequenceCreator, DataSplitter, DataStandardizer
 from src.model_training import DelayPredictionModel
 from src.evaluation import ModelEvaluator, ModelVisualizer
+from .utils import PipelineLogger
 
 def main():
     """
     メインパイプライン実行
     """
-    print("=== バス遅延予測モデル - メインパイプライン ===")
-    print(f"TensorFlow バージョン: {tf.__version__}")
-    print(f"Pandas バージョン: {pd.__version__}")
-    print(f"NumPy バージョン: {np.__version__}")
+    # ロガー初期化
+    logger = PipelineLogger("main_pipeline", "INFO")
+    
+    logger.info("=== バス遅延予測モデル - メインパイプライン ===")
+    logger.info(f"TensorFlow バージョン: {tf.__version__}")
+    logger.info(f"Pandas バージョン: {pd.__version__}")
+    logger.info(f"NumPy バージョン: {np.__version__}")
     
     # ===== 1. データベース接続・データ取得 =====
-    print("\n=== 1. データベース接続・データ取得 ===")
+    logger.info("\n=== 1. データベース接続・データ取得 ===")
     
     # データベース接続
     db_connector = DatabaseConnector()
     if not db_connector.test_connection():
-        print("データベース接続に失敗しました")
+        logger.error("データベース接続に失敗しました")
         return
     
     # GTFSデータ取得
@@ -50,23 +54,23 @@ def main():
     weather_retriever = WeatherDataRetriever(db_connector)
     weather_data = weather_retriever.get_weather_data()
     
-    print(f"GTFSデータ: {gtfs_data.shape}")
-    print(f"気象データ: {weather_data.shape}")
+    logger.info(f"GTFSデータ: {gtfs_data.shape}")
+    logger.info(f"気象データ: {weather_data.shape}")
     
     # ===== 2. データ前処理・特徴量エンジニアリング =====
-    print("\n=== 2. データ前処理・特徴量エンジニアリング ===")
+    logger.info("\n=== 2. データ前処理・特徴量エンジニアリング ===")
     
     # データ前処理
     preprocessor = DataPreprocessor()
     
     # 欠損値の確認
-    print("=== GTFS data ===")
+    logger.info("=== GTFS data ===")
     missing_summary = preprocessor.show_missing_data_summary(gtfs_data)
-    print(missing_summary)
+    logger.info(missing_summary)
     
-    print("\n=== Weather data ===")
+    logger.info("\n=== Weather data ===")
     missing_summary = preprocessor.show_missing_data_summary(weather_data)
-    print(missing_summary)
+    logger.info(missing_summary)
     
     # 欠損値削除
     filtered_gtfs_data = preprocessor.delete_missing_values(
@@ -89,11 +93,11 @@ def main():
     feature_cols = feature_engineer.get_feature_columns(delay_features)
     target_col = 'arrival_delay'
     
-    print(f"使用特徴量: {feature_cols}")
-    print(f"予測対象: {target_col}")
+    logger.info(f"使用特徴量: {feature_cols}")
+    logger.info(f"予測対象: {target_col}")
     
     # ===== 3. 時系列データ作成・データ分割 =====
-    print("\n=== 3. 時系列データ作成・データ分割 ===")
+    logger.info("\n=== 3. 時系列データ作成・データ分割 ===")
     
     # シーケンス作成
     sequence_creator = SequenceCreator(input_timesteps=8, output_timesteps=3)
@@ -102,7 +106,7 @@ def main():
     )
     
     if len(X) == 0:
-        print("シーケンス作成に失敗しました")
+        logger.error("シーケンス作成に失敗しました")
         return
     
     # データ分割
@@ -127,11 +131,11 @@ def main():
         X_test_scaled, target_height=1, target_width=actual_feature_count
     )
     
-    print(f"訓練データ形状: {X_train_reshaped.shape}")
-    print(f"テストデータ形状: {X_test_reshaped.shape}")
+    logger.info(f"訓練データ形状: {X_train_reshaped.shape}")
+    logger.info(f"テストデータ形状: {X_test_reshaped.shape}")
     
     # ===== 4. モデル構築・訓練 =====
-    print("\n=== 4. モデル構築・訓練 ===")
+    logger.info("\n=== 4. モデル構築・訓練 ===")
     
     # モデル作成
     model_trainer = DelayPredictionModel(input_timesteps=8, output_timesteps=3)
@@ -147,7 +151,7 @@ def main():
     )
     
     # ===== 5. 評価・可視化 =====
-    print("\n=== 5. 評価・可視化 ===")
+    logger.info("\n=== 5. 評価・可視化 ===")
     
     # 予測実行
     predictions = model_trainer.predict(X_test_reshaped)
@@ -184,13 +188,13 @@ def main():
     # モデル保存
     model_trainer.save_model('delay_prediction_model.h5')
     
-    print("\n=== パイプライン完了 ===")
-    print("結果:")
-    print(f"  - MAE: {overall_metrics['mae']/60:.2f} 分")
-    print(f"  - RMSE: {overall_metrics['rmse']/60:.2f} 分")
-    print(f"  - R²: {overall_metrics['r2']:.3f}")
-    print(f"  - 方向予測精度: {overall_metrics['direction_accuracy']*100:.1f}%")
-    print(f"  - 1分以内精度: {overall_metrics['range_accuracies']['Within 1min']*100:.1f}%")
+    logger.info("\n=== パイプライン完了 ===")
+    logger.info("結果:")
+    logger.info(f"  - MAE: {overall_metrics['mae']/60:.2f} 分")
+    logger.info(f"  - RMSE: {overall_metrics['rmse']/60:.2f} 分")
+    logger.info(f"  - R²: {overall_metrics['r2']:.3f}")
+    logger.info(f"  - 方向予測精度: {overall_metrics['direction_accuracy']*100:.1f}%")
+    logger.info(f"  - 1分以内精度: {overall_metrics['range_accuracies']['Within 1min']*100:.1f}%")
 
 if __name__ == "__main__":
     # スタイル設定
