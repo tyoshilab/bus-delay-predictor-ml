@@ -9,22 +9,10 @@
 
 # ===== データファイル =====
 # 大容量データファイル
-*.csv
-!sample.csv
-!example.csv
-data/*.csv
-climate/*.csv
-GTFS/data/*.csv
-
-# GTFS公式データ
-gtfs/
-gtfs_data/
-*.zip
+data/**/*.csv
 
 # 気象データ
-weather_data/
-climate_data/
-weatherstats_*.csv
+climate/downloads/*.csv
 
 # ===== 機械学習モデル =====
 *.h5
@@ -33,18 +21,6 @@ weatherstats_*.csv
 *.joblib
 *.model
 models/
-checkpoints/
-delay_prediction_model.*
-
-# ===== 出力・結果ファイル =====
-output/
-results/
-figures/
-plots/
-*.png
-*.jpg
-*.pdf
-!docs/images/*.png
 
 # ===== ログファイル =====
 logs/
@@ -53,11 +29,6 @@ debug.log
 
 # ===== 一時ファイル =====
 tmp/
-temp/
-.tmp/
-*.tmp
-*.bak
-*.backup
 
 # ===== Python関連 =====
 __pycache__/
@@ -77,7 +48,3 @@ htmlcov/
 .idea/
 *.swp
 *.swo
-
-# ===== OS関連 =====
-.DS_Store
-Thumbs.db
