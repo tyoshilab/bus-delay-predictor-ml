@@ -17,10 +17,15 @@ class DataAggregator:
         agg_dict = {
             'arrival_delay': 'mean',
             'travel_time_duration': 'mean',
-            'trip_id': 'count',  # データ数（信頼性指標）
-            'delay_mean_by_route_hour': 'mean'
+            'trip_id': 'count'  # データ数（信頼性指標）
         }
-        
+
+        # Add statistical features if they exist
+        if 'delay_mean_by_route_hour' in data.columns:
+            agg_dict['delay_mean_by_route_hour'] = 'first'
+        if 'travel_mean_by_route_hour' in data.columns:
+            agg_dict['travel_mean_by_route_hour'] = 'first'
+
         aggregated = data.groupby(aggregation_keys).agg(agg_dict).reset_index()
         aggregated = aggregated.rename(columns={'trip_id': 'observation_count'})
         

@@ -5,7 +5,7 @@ GTFS Bus Delay Prediction Package
 """
 
 # データ接続
-from .data_connection import DatabaseConnector, GTFSDataRetriever, WeatherDataRetriever
+from .data_connection import DatabaseConnector, GTFSDataRetriever, GTFSDataRetrieverV2, WeatherDataRetriever
 
 # データ前処理
 from .data_preprocessing import DataPreprocessor, DataAggregator, FeatureEngineer
@@ -30,6 +30,7 @@ __all__ = [
     # Data Connection
     'DatabaseConnector',
     'GTFSDataRetriever', 
+    'GTFSDataRetrieverV2',
     'WeatherDataRetriever',
     
     # Data Preprocessing

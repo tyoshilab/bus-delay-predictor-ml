@@ -67,16 +67,6 @@ create table gtfs_rt_alerts (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
--- TEMPORARILY COMMENTED OUT FOR BULK INSERT PERFORMANCE
--- create index idx_alerts_cause_effect
---   on gtfs_rt_alerts(cause,effect);
--- 
--- create index idx_alerts_feed_entity
---   on gtfs_rt_alerts(feed_entity_id);
--- 
--- create index idx_rt_alerts_created_at
---   on gtfs_rt_alerts(created_at);
-
 create unique index gtfs_rt_alerts_PKI
   on gtfs_rt_alerts(alert_id);
 
@@ -97,12 +87,6 @@ create table gtfs_rt_feed_entities (
 alter table gtfs_rt_feed_entities add constraint gtfs_rt_feed_entities_feed_message_id_entity_id_key
   unique (feed_message_id,entity_id) ;
 
--- create index idx_feed_entities_entity_id
---   on gtfs_rt_feed_entities(entity_id);
--- 
--- create index idx_feed_entities_message_type
---   on gtfs_rt_feed_entities(feed_message_id,entity_type);
-
 create unique index gtfs_rt_feed_entities_PKI
   on gtfs_rt_feed_entities(id);
 
@@ -121,9 +105,6 @@ create table gtfs_rt_feed_headers (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
--- create index idx_feed_headers_timestamp
---   on gtfs_rt_feed_headers(timestamp_seconds);
-
 create unique index gtfs_rt_feed_headers_PKI
   on gtfs_rt_feed_headers(id);
 
@@ -139,9 +120,6 @@ create table gtfs_rt_feed_messages (
   , file_size integer
   , processed_at timestamp(6) with time zone
 ) ;
-
--- create index idx_feed_messages_type_created
---   on gtfs_rt_feed_messages(feed_type,created_at);
 
 create unique index gtfs_rt_feed_messages_PKI
   on gtfs_rt_feed_messages(id);
@@ -167,9 +145,6 @@ create table gtfs_rt_stop_time_updates (
 alter table gtfs_rt_stop_time_updates add constraint gtfs_rt_stop_time_updates_trip_update_id_stop_sequence_key
   unique (trip_update_id,stop_sequence) ;
 
--- create index idx_stop_time_updates_stop_id
---   on gtfs_rt_stop_time_updates(stop_id);
-
 create unique index gtfs_rt_stop_time_updates_PKI
   on gtfs_rt_stop_time_updates(id);
 
@@ -191,12 +166,6 @@ create table gtfs_rt_trip_descriptors (
 alter table gtfs_rt_trip_descriptors add constraint gtfs_rt_trip_descriptors_trip_id_route_id_direction_id_star_key
   unique (trip_id,route_id,direction_id,start_date) ;
 
--- create index idx_trip_descriptors_route_direction
---   on gtfs_rt_trip_descriptors(route_id,direction_id);
--- 
--- create index idx_trip_descriptors_trip_route
---   on gtfs_rt_trip_descriptors(trip_id,route_id);
-
 create unique index gtfs_rt_trip_descriptors_PKI
   on gtfs_rt_trip_descriptors(trip_descriptor_id);
 
@@ -212,12 +181,6 @@ create table gtfs_rt_trip_updates (
   , vehicle_descriptor_id integer not null
   , created_at timestamp(6) with time zone default now()
 ) ;
-
--- create index idx_rt_trip_updates_created_at
---   on gtfs_rt_trip_updates(created_at);
--- 
--- create index idx_trip_updates_feed_entity
---   on gtfs_rt_trip_updates(feed_entity_id);
 
 create unique index gtfs_rt_trip_updates_PKI
   on gtfs_rt_trip_updates(trip_update_id);
@@ -236,9 +199,6 @@ create table gtfs_rt_vehicle_descriptors (
 
 alter table gtfs_rt_vehicle_descriptors add constraint gtfs_rt_vehicle_descriptors_vehicle_id_label_key
   unique (vehicle_id,label) ;
-
--- create index idx_vehicle_descriptors_vehicle_id
---   on gtfs_rt_vehicle_descriptors(vehicle_id);
 
 create unique index gtfs_rt_vehicle_descriptors_PKI
   on gtfs_rt_vehicle_descriptors(vehicle_descriptor_id);
@@ -261,18 +221,6 @@ create table gtfs_rt_vehicle_positions (
   , vehicle_descriptor_id integer not null
   , created_at timestamp(6) with time zone default now()
 ) ;
-
--- create index idx_rt_vehicle_positions_created_at
---   on gtfs_rt_vehicle_positions(created_at);
--- 
--- create index idx_vehicle_positions_feed_entity
---   on gtfs_rt_vehicle_positions(feed_entity_id);
--- 
--- create index idx_vehicle_positions_timestamp
---   on gtfs_rt_vehicle_positions(timestamp_seconds);
--- 
--- create index idx_vehicle_positions_vehicle
---   on gtfs_rt_vehicle_positions(vehicle_descriptor_id);
 
 create unique index gtfs_rt_vehicle_positions_PKI
   on gtfs_rt_vehicle_positions(id);
