@@ -8,6 +8,8 @@ import os
 import sys
 import pandas as pd
 import logging
+import argparse
+from pathlib import Path
 
 # Add parent directory to path to import DatabaseConnector
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -82,8 +84,17 @@ def load_weather_csv_to_table(csv_path: str, table_name: str, db_connector: Data
 def main():
     """Main function to load weather data incrementally."""
     
+    parser = argparse.ArgumentParser(description="Vancouver Climate Data Cleaner")
+    parser.add_argument("input_file", help="入力CSVファイルパス")
+    args = parser.parse_args()
+    input_file = args.input_file
+
+    input_path = Path(args.input_file)
+    if not input_path.exists():
+        logger.error(f"入力ファイルが存在しません: {input_path}")
+        return 1
+
     # Path to weather CSV file
-    weather_csv = "/workspace/GTFS/climate/weatherstats_vancouver_hourly_filled.csv"
     table_name = 'weather_hourly'
     
     logger.info("Starting incremental weather data loading...")
@@ -97,7 +108,7 @@ def main():
         return
     
     # Load weather data (with duplicate detection)
-    load_weather_csv_to_table(weather_csv, table_name, db_connector)
+    load_weather_csv_to_table(input_file, table_name, db_connector)
     
     logger.info("Weather data loading completed!")
     
