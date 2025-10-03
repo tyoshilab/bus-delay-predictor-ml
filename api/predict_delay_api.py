@@ -15,7 +15,7 @@ import tensorflow as tf
 from pathlib import Path
 
 # プロジェクトルートをパスに追加
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data_connection import DatabaseConnector, GTFSDataRetrieverV2 as GTFSDataRetriever, WeatherDataRetriever
 from src.data_preprocessing import DataPreprocessor, DataAggregator, FeatureEngineer
@@ -358,7 +358,7 @@ def main():
         result = predict_route_delay(
             route_id=route_id,
             direction_id=direction_id,
-            model_path='best_delay_model.h5',
+            model_path='files/model/best_delay_model.h5',
             lookback_days=7
         )
 

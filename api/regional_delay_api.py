@@ -174,8 +174,11 @@ class RegionalDelayAggregator:
             median_delay_minutes,
             delay_status,
             delay_over_5min_pct,
-            trip_count
+            trip_count,
+            center_lat,
+            center_lon
         FROM gtfs_realtime.regional_delays_recent_mv
+        inner join gtfs_static.regions using(region_id)
         WHERE region_id = '{region_id}'
         ORDER BY time_bucket DESC
         LIMIT 1
@@ -328,7 +331,9 @@ class RegionalDelayPredictionAPI:
                         "status": recent_status['delay_status'],
                         "avg_delay_minutes": round(float(recent_status['avg_delay_minutes']), 2),
                         "last_updated": recent_status['time_bucket'].strftime("%Y-%m-%d %H:%M:%S"),
-                        "trip_count": int(recent_status['trip_count'])
+                        "trip_count": int(recent_status['trip_count']),
+                        "center_lat": recent_status['center_lat'],
+                        "center_lon": recent_status['center_lon']
                     })
                 else:
                     results.append({
@@ -338,7 +343,9 @@ class RegionalDelayPredictionAPI:
                         "status": "no_data",
                         "avg_delay_minutes": None,
                         "last_updated": None,
-                        "trip_count": 0
+                        "trip_count": 0,
+                        "center_lat": None,
+                        "center_lon": None
                     })
             except Exception as e:
                 results.append({
