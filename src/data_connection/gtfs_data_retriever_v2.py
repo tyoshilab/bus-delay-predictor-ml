@@ -50,9 +50,24 @@ class GTFSDataRetrieverV2:
 
         # タイムゾーン変換
         if 'datetime' in gtfs_data.columns:
-            gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_convert('America/Vancouver')
+            # datetime型でない場合は変換
+            if not pd.api.types.is_datetime64_any_dtype(gtfs_data['datetime']):
+                gtfs_data['datetime'] = pd.to_datetime(gtfs_data['datetime'])
+            # タイムゾーンがない場合はUTCとして扱い、Vancouverに変換
+            if gtfs_data['datetime'].dt.tz is None:
+                gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
+            else:
+                gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_convert('America/Vancouver')
+
         if 'datetime_60' in gtfs_data.columns:
-            gtfs_data['datetime_60'] = gtfs_data['datetime_60'].dt.tz_convert('America/Vancouver')
+            # datetime型でない場合は変換
+            if not pd.api.types.is_datetime64_any_dtype(gtfs_data['datetime_60']):
+                gtfs_data['datetime_60'] = pd.to_datetime(gtfs_data['datetime_60'])
+            # タイムゾーンがない場合はUTCとして扱い、Vancouverに変換
+            if gtfs_data['datetime_60'].dt.tz is None:
+                gtfs_data['datetime_60'] = gtfs_data['datetime_60'].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
+            else:
+                gtfs_data['datetime_60'] = gtfs_data['datetime_60'].dt.tz_convert('America/Vancouver')
 
         print(f"Retrieved {len(gtfs_data):,} records")
         return gtfs_data

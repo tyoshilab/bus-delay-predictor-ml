@@ -29,9 +29,13 @@ class DatabaseConnector:
             self.db_config.database_url = database_url
             self.db_config._parse_connection_url()
 
+        # Add timezone to connect_args
+        connect_args = self.db_config.get_sqlalchemy_connect_args()
+        connect_args['options'] = '-c timezone=America/Vancouver'
+
         self.engine = create_engine(
             self.db_config.database_url,
-            connect_args=self.db_config.get_sqlalchemy_connect_args(),
+            connect_args=connect_args,
             pool_pre_ping=True,
         )
     

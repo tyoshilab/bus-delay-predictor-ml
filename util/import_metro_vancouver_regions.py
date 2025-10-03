@@ -14,7 +14,7 @@ import csv
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 from src.data_connection import DatabaseConnector
 
 
@@ -23,7 +23,7 @@ def load_region_data():
 
     # Load region names from CSV
     regions = []
-    with open('metro_vancouver_region_boundaries.csv', 'r') as f:
+    with open('files/region/metro_vancouver_region_boundaries.csv', 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row['Name']:  # Skip empty rows
@@ -34,7 +34,7 @@ def load_region_data():
                 })
 
     # Load geometries from GeoJSON
-    with open('metro_vancouver_region_boundaries.geojson', 'r') as f:
+    with open('files/region/metro_vancouver_region_boundaries.geojson', 'r') as f:
         geojson = json.load(f)
 
     # Match them
@@ -335,8 +335,7 @@ def import_regions_to_database(dry_run=False):
     print("="*70)
 
     print("\nNext steps:")
-    print("  1. Run: psql -d <database> -f DB/10_create_regional_delay_views.sql")
-    print("  2. Test: python regional_delay_api_proposal.py")
+    print("  1. Run: psql -d <database> -f DB/07_create_regional_delay_views.sql")
 
 
 if __name__ == "__main__":
