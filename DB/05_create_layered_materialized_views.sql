@@ -17,30 +17,49 @@
 DROP MATERIALIZED VIEW IF EXISTS gtfs_realtime.gtfs_rt_base_mv CASCADE;
 
 CREATE MATERIALIZED VIEW gtfs_realtime.gtfs_rt_base_mv AS
+WITH latest_updates AS (
+    SELECT
+        stu.id,
+        td.route_id,
+        td.trip_id,
+        td.start_date,
+        td.direction_id,
+        stu.stop_id,
+        stu.stop_sequence,
+        to_timestamp(stu.arrival_time) as actual_arrival_time,
+        stu.arrival_delay,
+        to_timestamp(fh.timestamp_seconds) as update_time,
+        ROW_NUMBER() OVER (
+            PARTITION BY td.trip_id, stu.stop_sequence, td.start_date
+            ORDER BY fh.timestamp_seconds DESC
+        ) as rn
+    FROM gtfs_realtime.gtfs_rt_stop_time_updates stu
+    INNER JOIN gtfs_realtime.gtfs_rt_trip_updates tu
+        ON stu.trip_update_id = tu.trip_update_id
+    INNER JOIN gtfs_realtime.gtfs_rt_trip_descriptors td
+        ON tu.trip_descriptor_id = td.trip_descriptor_id
+    INNER JOIN gtfs_realtime.gtfs_rt_feed_entities fe
+        ON tu.feed_entity_id = fe.id
+    INNER JOIN gtfs_realtime.gtfs_rt_feed_messages fm
+        ON fe.feed_message_id = fm.id
+    INNER JOIN gtfs_realtime.gtfs_rt_feed_headers fh
+        ON fm.id = fh.feed_message_id
+    WHERE stu.arrival_delay BETWEEN -3600 AND 3600  -- Filter obvious outliers early
+      AND stu.arrival_time IS NOT NULL
+)
 SELECT
-    stu.id,
-    td.route_id,
-    td.trip_id,
-    td.start_date,
-    td.direction_id,
-    stu.stop_id,
-    stu.stop_sequence,
-    to_timestamp(stu.arrival_time) as actual_arrival_time,
-    stu.arrival_delay,
-    to_timestamp(fh.timestamp_seconds) as update_time
-FROM gtfs_realtime.gtfs_rt_stop_time_updates stu
-INNER JOIN gtfs_realtime.gtfs_rt_trip_updates tu
-    ON stu.trip_update_id = tu.trip_update_id
-INNER JOIN gtfs_realtime.gtfs_rt_trip_descriptors td
-    ON tu.trip_descriptor_id = td.trip_descriptor_id
-INNER JOIN gtfs_realtime.gtfs_rt_feed_entities fe
-    ON tu.feed_entity_id = fe.id
-INNER JOIN gtfs_realtime.gtfs_rt_feed_messages fm
-    ON fe.feed_message_id = fm.id
-INNER JOIN gtfs_realtime.gtfs_rt_feed_headers fh
-    ON fm.id = fh.feed_message_id
-WHERE stu.arrival_delay BETWEEN -3600 AND 3600  -- Filter obvious outliers early
-  AND stu.arrival_time IS NOT NULL;
+    id,
+    route_id,
+    trip_id,
+    start_date,
+    direction_id,
+    stop_id,
+    stop_sequence,
+    actual_arrival_time,
+    arrival_delay,
+    update_time
+FROM latest_updates
+WHERE rn = 1;
 
 -- Unique index required for CONCURRENTLY refresh
 CREATE UNIQUE INDEX idx_gtfs_rt_base_mv_unique

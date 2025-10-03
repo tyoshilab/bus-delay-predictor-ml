@@ -25,8 +25,8 @@ SELECT
     r.region_name,
     r.region_type,
     DATE_TRUNC('hour', a.datetime_60) as time_bucket,
-    EXTRACT(DOW FROM a.datetime_60) as day_of_week,
-    EXTRACT(HOUR FROM a.datetime_60) as hour_of_day,
+    EXTRACT(DOW FROM DATE_TRUNC('hour', a.datetime_60)) as day_of_week,
+    EXTRACT(HOUR FROM DATE_TRUNC('hour', a.datetime_60)) as hour_of_day,
     -- Trip統計
     COUNT(DISTINCT a.trip_id) as trip_count,
     COUNT(DISTINCT a.route_id) as route_count,
@@ -63,11 +63,12 @@ GROUP BY
     r.region_id,
     r.region_name,
     r.region_type,
-    datetime_60,
-    day_of_week,
-    hour_of_day;
+    DATE_TRUNC('hour', a.datetime_60);
 
 -- インデックス作成
+CREATE UNIQUE INDEX idx_regional_delays_hourly_unique
+    ON gtfs_realtime.regional_delays_hourly_mv(region_id, time_bucket);
+
 CREATE INDEX idx_regional_delays_hourly_time
     ON gtfs_realtime.regional_delays_hourly_mv(time_bucket DESC);
 
@@ -130,6 +131,9 @@ GROUP BY
     day_of_week;
 
 -- インデックス作成
+CREATE UNIQUE INDEX idx_regional_delays_daily_unique
+    ON gtfs_realtime.regional_delays_daily_mv(region_id, date);
+
 CREATE INDEX idx_regional_delays_daily_date
     ON gtfs_realtime.regional_delays_daily_mv(date DESC);
 
@@ -183,6 +187,9 @@ GROUP BY
 ORDER BY time_bucket DESC;
 
 -- インデックス作成
+CREATE UNIQUE INDEX idx_regional_delays_recent_unique
+    ON gtfs_realtime.regional_delays_recent_mv(region_id, time_bucket);
+
 CREATE INDEX idx_regional_delays_recent_time
     ON gtfs_realtime.regional_delays_recent_mv(time_bucket DESC);
 
@@ -254,6 +261,9 @@ SELECT
 
 FROM regional_stats
 ORDER BY avg_delay_minutes_7d ASC;
+
+CREATE UNIQUE INDEX idx_regional_performance_ranking_unique
+    ON gtfs_realtime.regional_performance_ranking_mv(region_id);
 
 COMMENT ON MATERIALIZED VIEW gtfs_realtime.regional_performance_ranking_mv
     IS '地域別パフォーマンスランキング（過去7日間）';
