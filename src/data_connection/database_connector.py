@@ -46,7 +46,10 @@ class DatabaseConnector:
     def read_sql(self, query, params=None) -> pd.DataFrame:
         """SQLクエリを実行してDataFrameを返す"""
         with self.get_connection() as conn:
-            return pd.read_sql_query(query, conn, params=params)
+            df = pd.read_sql_query(query, conn, params=params)
+        for col in df.select_dtypes(include=['datetime64']).columns:
+            df[col] = df[col].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
+        return df
     
     def test_connection(self):
         """接続テスト"""
