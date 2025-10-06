@@ -106,7 +106,20 @@ class GTFSDataRetrieverV2:
             day_cos,
             is_peak_hour,
             is_weekend,
-            time_period_basic
+            time_period_basic,
+            -- 地理的特徴量 (事前計算済み)
+            stop_lat,
+            stop_lon,
+            region_id,
+            distance_from_downtown_km,
+            lat_sin,
+            lat_cos,
+            lon_sin,
+            lon_cos,
+            lat_relative,
+            lon_relative,
+            area_type,
+            area_density_score
         FROM gtfs_realtime.gtfs_rt_analytics_mv
         WHERE route_id = ANY(%(route_ids)s)
           AND start_date >= %(start_date)s

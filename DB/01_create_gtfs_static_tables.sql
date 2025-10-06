@@ -485,6 +485,30 @@ create index idx_vehicle_positions_vehicle
 create unique index gtfs_rt_vehicle_positions_PKI
   on gtfs_rt_vehicle_positions(id);
 
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Drop existing table
+DROP TABLE IF EXISTS gtfs_static.regions CASCADE;
+
+-- Create regions table
+CREATE TABLE gtfs_static.regions (
+    region_id VARCHAR(50) PRIMARY KEY,
+    region_name VARCHAR(100) NOT NULL,
+    region_type VARCHAR(50),
+    boundary GEOMETRY(Geometry, 4326) NOT NULL,  -- Support both Polygon and MultiPolygon
+    center_lat NUMERIC(10, 8),
+    center_lon NUMERIC(11, 8),
+    population INTEGER,
+    area_km2 NUMERIC(10, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_regions_boundary ON gtfs_static.regions USING GIST(boundary);
+CREATE INDEX idx_regions_name ON gtfs_static.regions(region_name);
+CREATE INDEX idx_regions_type ON gtfs_static.regions(region_type);
+
 alter table gtfs_rt_vehicle_positions
   add constraint gtfs_rt_vehicle_positions_PKC primary key (id);
 

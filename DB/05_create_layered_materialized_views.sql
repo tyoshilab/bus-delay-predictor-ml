@@ -100,6 +100,9 @@ SELECT
     r.route_short_name,
     t.trip_headsign,
     s.stop_name,
+    s.stop_lat,
+    s.stop_lon,
+    s.region_id,
     st.arrival_time as scheduled_arrival_time,
     -- Derived time features
     EXTRACT(isodow FROM base.start_date::date) as day_of_week,
@@ -185,6 +188,9 @@ SELECT
     f.route_short_name,
     f.trip_headsign,
     f.stop_name,
+    f.stop_lat,
+    f.stop_lon,
+    f.region_id,
     f.scheduled_arrival_time,
     f.day_of_week,
     -- Statistical features (previously computed in Python)
@@ -206,7 +212,59 @@ SELECT
         WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 12 AND 16 THEN 'Afternoon'
         WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 17 AND 19 THEN 'Evening'
         ELSE 'Night'
-    END as time_period_basic
+    END as time_period_basic,
+    -- Geographic features (lat/lon encoding and area categorization)
+    -- Vancouver Downtown reference point: 49.2827°N, 123.1207°W
+    -- Distance from downtown (in km using Haversine approximation)
+    ROUND(
+        6371 * ACOS(
+            COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
+            COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
+            SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat))
+        )::NUMERIC, 2
+    ) as distance_from_downtown_km,
+    -- Lat/Lon sin/cos encoding (preserves spatial relationships)
+    SIN(RADIANS(f.stop_lat)) as lat_sin,
+    COS(RADIANS(f.stop_lat)) as lat_cos,
+    SIN(RADIANS(f.stop_lon)) as lon_sin,
+    COS(RADIANS(f.stop_lon)) as lon_cos,
+    -- Relative coordinates from downtown
+    ROUND((f.stop_lat - 49.2827)::NUMERIC, 4) as lat_relative,
+    ROUND((f.stop_lon - (-123.1207))::NUMERIC, 4) as lon_relative,
+    -- Broader area categorization based on distance and region
+    CASE
+        WHEN f.region_id IN ('vancouver', 'burnaby', 'new_westminster')
+             AND ROUND(6371 * ACOS(COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
+                       COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
+                       SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat)))::NUMERIC, 2) < 5
+             THEN 'urban_core'
+        WHEN f.region_id IN ('vancouver', 'burnaby', 'richmond', 'new_westminster', 'north_vancouver_city', 'north_vancouver_district')
+             THEN 'urban'
+        WHEN f.region_id IN ('surrey', 'coquitlam', 'port_coquitlam', 'port_moody', 'west_vancouver', 'delta')
+             THEN 'suburban'
+        WHEN f.region_id IN ('langley_city', 'langley_township', 'maple_ridge', 'pitt_meadows', 'white_rock')
+             THEN 'suburban_outer'
+        WHEN f.region_id IN ('lions_bay', 'belcarra', 'anmore', 'bowen_island')
+             THEN 'rural'
+        ELSE 'unclassified'
+    END as area_type,
+    -- Region density score (1=rural, 2=suburban_outer, 3=suburban, 4=urban, 5=urban_core)
+    CASE
+        WHEN f.region_id IN ('vancouver', 'burnaby', 'new_westminster')
+             AND ROUND(6371 * ACOS(COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
+                       COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
+                       SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat)))::NUMERIC, 2) < 5
+             THEN 5
+        WHEN f.region_id IN ('vancouver', 'burnaby', 'richmond', 'new_westminster', 'north_vancouver_city', 'north_vancouver_district')
+             THEN 4
+        WHEN f.region_id IN ('surrey', 'coquitlam', 'port_coquitlam', 'port_moody', 'west_vancouver', 'delta')
+             THEN 3
+        WHEN f.region_id IN ('langley_city', 'langley_township', 'maple_ridge', 'pitt_meadows', 'white_rock')
+             THEN 2
+        WHEN f.region_id IN ('lions_bay', 'belcarra', 'anmore', 'bowen_island')
+             THEN 1
+        ELSE 0
+    END as area_density_score
 FROM filtered f
 LEFT JOIN route_hour_stats rhs
     ON f.route_id = rhs.route_id
