@@ -1,0 +1,21 @@
+# Core scientific computing
+numpy==1.26.4
+pandas==2.2.1
+matplotlib==3.8.3
+seaborn==0.13.2
+openpyxl==3.1.2
+
+# Machine learning (CPU-only)
+scikit-learn==1.4.1.post1
+tensorflow-cpu==2.16.1
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.28
+
+# Jupyter
+ipykernel==6.29.3
+
+# Additional dependencies from existing codebase
+python-dotenv==1.0.1
+rich==13.7.1

@@ -1,15 +1,8 @@
 {
   "name": "DS-sandbox (CPU)",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "args": {
-      "TZ": "${localEnv:TZ:America/Los_Angeles}"
-    }
-  },
-  "runArgs": [
-    "--name=ds-sandbox",
-    "--shm-size=2g"
-  ],
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "api",
+  "workspaceFolder": "/app",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -39,8 +32,6 @@
       }
     }
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
-  "workspaceFolder": "/workspace",
   "postCreateCommand": "python -c 'import tensorflow as tf; print(\"TensorFlow:\", tf.__version__); print(\"Running on CPU\")'",
   "remoteEnv": {
     "TF_CPP_MIN_LOG_LEVEL": "1"

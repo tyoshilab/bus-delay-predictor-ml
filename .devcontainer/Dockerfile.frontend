@@ -1,0 +1,22 @@
+# Frontend Development Container for Next.js Application
+FROM node:20-bullseye
+
+# Install basic development tools
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace/vencoucer-bus-scienmce
+
+# Install global npm packages
+RUN npm install -g npm@latest
+
+# Expose Next.js default port
+EXPOSE 3000
+
+# Keep container running
+CMD ["tail", "-f", "/dev/null"]
