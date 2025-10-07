@@ -48,6 +48,7 @@
   "postCreateCommand": "python -c 'import tensorflow as tf; print(\"TensorFlow:\", tf.__version__); gpus = tf.config.list_physical_devices(\"GPU\"); print(\"GPUs available:\", len(gpus)); [print(f\"  - {gpu.name}\") for gpu in gpus]'",
   "remoteEnv": {
     "TF_CPP_MIN_LOG_LEVEL": "1",
-    "CUDA_VISIBLE_DEVICES": "0"
+    "CUDA_VISIBLE_DEVICES": "0",
+    "LD_LIBRARY_PATH": "/usr/local/lib/python3.11/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/dist-packages/nvidia/cublas/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
   }
 }
