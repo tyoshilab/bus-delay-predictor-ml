@@ -19,7 +19,7 @@ class GTFSDataRetrieverV2:
         """
         self.db_connector = db_connector
 
-    def get_gtfs_data(self, route_id=['6612'], start_date='20250818', use_analytics_mv=True):
+    def get_gtfs_data(self, route_id=None, start_date='20250818', use_analytics_mv=True):
         """
         バンクーバー遅延予測用GTFSデータを取得
 
@@ -34,11 +34,12 @@ class GTFSDataRetrieverV2:
         # route_idの正規化（文字列の場合はリストに変換）
         if isinstance(route_id, str):
             route_id_list = [route_id]
-        else:
+        elif isinstance(route_id, list):
             route_id_list = route_id
+        else:
+            route_id_list = None
 
-        route_ids_str = ', '.join(route_id_list)
-        print(f"Retrieving Vancouver delay prediction GTFS data for routes: {route_ids_str}...")
+        print(f"Retrieving Vancouver delay prediction GTFS data for routes: {route_id_list}...")
         print(f"Data source: {'Analytics MV (fully processed)' if use_analytics_mv else 'Enriched MV (minimal processing)'}")
 
         if use_analytics_mv:
@@ -82,52 +83,63 @@ class GTFSDataRetrieverV2:
         - 最も高速だが、MVの更新頻度に依存
         """
         gtfs_query = """
-        SELECT
-            actual_arrival_time as datetime,
-            datetime_60,
-            day_of_week,
-            stop_sequence as line_direction_link_order,
-            trip_id,
-            stop_id,
-            start_date,
-            route_id,
-            direction_id,
-            travel_time_raw_seconds,
-            arrival_delay,
-            travel_time_duration,
-            -- 統計特徴量 (事前計算済み)
-            delay_mean_by_route_hour,
-            travel_mean_by_route_hour,
-            -- 時系列特徴量 (事前計算済み)
-            hour_of_day,
-            hour_sin,
-            hour_cos,
-            day_sin,
-            day_cos,
-            is_peak_hour,
-            is_weekend,
-            time_period_basic,
-            -- 地理的特徴量 (事前計算済み)
-            stop_lat,
-            stop_lon,
-            region_id,
-            distance_from_downtown_km,
-            lat_sin,
-            lat_cos,
-            lon_sin,
-            lon_cos,
-            lat_relative,
-            lon_relative,
-            area_type,
-            area_density_score
-        FROM gtfs_realtime.gtfs_rt_analytics_mv
-        WHERE route_id = ANY(%(route_ids)s)
-          AND start_date >= %(start_date)s
-          AND travel_time_duration IS NOT NULL
-        ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
-        """
-
-        params = {'route_ids': route_id_list, 'start_date': start_date}
+            SELECT
+                actual_arrival_time as datetime,
+                datetime_60,
+                day_of_week,
+                stop_sequence as line_direction_link_order,
+                trip_id,
+                stop_id,
+                start_date,
+                route_id,
+                direction_id,
+                travel_time_raw_seconds,
+                arrival_delay,
+                travel_time_duration,
+                -- 統計特徴量 (事前計算済み)
+                delay_mean_by_route_hour,
+                travel_mean_by_route_hour,
+                -- 時系列特徴量 (事前計算済み)
+                hour_of_day,
+                hour_sin,
+                hour_cos,
+                day_sin,
+                day_cos,
+                is_peak_hour,
+                is_weekend,
+                time_period_basic,
+                -- 地理的特徴量 (事前計算済み)
+                stop_lat,
+                stop_lon,
+                region_id,
+                distance_from_downtown_km,
+                lat_sin,
+                lat_cos,
+                lon_sin,
+                lon_cos,
+                lat_relative,
+                lon_relative,
+                area_type,
+                area_density_score
+            FROM gtfs_realtime.gtfs_rt_analytics_mv
+            """
+        # route_id_listがNoneの場合はフィルターを適用しない
+        if route_id_list is None:
+            gtfs_query += """
+            WHERE start_date >= %(start_date)s
+              AND travel_time_duration IS NOT NULL
+            ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
+            """
+            params = {'start_date': start_date}
+        else:
+            gtfs_query += """
+            WHERE route_id = ANY(%(route_ids)s)
+              AND start_date >= %(start_date)s
+              AND travel_time_duration IS NOT NULL
+            ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
+            """
+            params = {'route_ids': route_id_list, 'start_date': start_date}
+        
         return self.db_connector.read_sql(gtfs_query, params=params)
 
     def _get_from_enriched_mv(self, route_id_list, start_date):
