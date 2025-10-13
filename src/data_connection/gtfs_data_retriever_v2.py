@@ -98,6 +98,7 @@ class GTFSDataRetrieverV2:
                 travel_time_duration,
                 -- 統計特徴量 (事前計算済み)
                 delay_mean_by_route_hour,
+                delay_mean_by_stop_hour,
                 travel_mean_by_route_hour,
                 -- 時系列特徴量 (事前計算済み)
                 hour_of_day,

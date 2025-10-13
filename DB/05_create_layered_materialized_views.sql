@@ -171,6 +171,17 @@ route_hour_stats AS (
     WHERE travel_time_duration IS NOT NULL
     GROUP BY route_id, direction_id, EXTRACT(HOUR FROM actual_arrival_time)
     HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
+),
+stop_hour_stats AS (
+    SELECT
+        stop_id,
+        stop_sequence,
+        EXTRACT(HOUR FROM actual_arrival_time) as hour_of_day,
+        AVG(arrival_delay) as delay_mean_by_stop_hour,
+        COUNT(*) as sample_count
+    FROM filtered
+    GROUP BY stop_id, stop_sequence, EXTRACT(HOUR FROM actual_arrival_time)
+    HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
 )
 SELECT
     f.id,
@@ -196,6 +207,7 @@ SELECT
     -- Statistical features (previously computed in Python)
     rhs.delay_mean_by_route_hour,
     rhs.travel_mean_by_route_hour,
+    shs.delay_mean_by_stop_hour,
     -- Time-based features (previously computed in Python)
     EXTRACT(HOUR FROM f.actual_arrival_time)::INTEGER as hour_of_day,
     SIN(2 * PI() * EXTRACT(HOUR FROM f.actual_arrival_time) / 24) as hour_sin,
@@ -270,6 +282,10 @@ LEFT JOIN route_hour_stats rhs
     ON f.route_id = rhs.route_id
     AND f.direction_id = rhs.direction_id
     AND EXTRACT(HOUR FROM f.actual_arrival_time) = rhs.hour_of_day
+LEFT JOIN stop_hour_stats shs
+    ON f.stop_id = shs.stop_id
+    AND f.stop_sequence = shs.stop_sequence
+    AND EXTRACT(HOUR FROM f.actual_arrival_time) = shs.hour_of_day
 WHERE f.travel_time_duration IS NOT NULL
    OR f.travel_time_raw_seconds IS NULL;  -- Keep first stop of each trip
 

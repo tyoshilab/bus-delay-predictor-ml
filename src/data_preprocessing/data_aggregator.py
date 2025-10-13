@@ -23,6 +23,8 @@ class DataAggregator:
         # Add statistical features if they exist
         if 'delay_mean_by_route_hour' in data.columns:
             agg_dict['delay_mean_by_route_hour'] = 'first'
+        if 'delay_mean_by_stop_hour' in data.columns:
+            agg_dict['delay_mean_by_stop_hour'] = 'first'
         if 'travel_mean_by_route_hour' in data.columns:
             agg_dict['travel_mean_by_route_hour'] = 'first'
 
