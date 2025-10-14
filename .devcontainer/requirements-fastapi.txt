@@ -1,5 +1,5 @@
-# FastAPI Requirements
-# Additional dependencies for the FastAPI server
+# FastAPI API Requirements
+# Standalone dependencies for the FastAPI server (no requirements-cpu.txt needed)
 
 # FastAPI framework
 fastapi==0.109.0
@@ -10,5 +10,20 @@ pydantic-settings==2.1.0
 # CORS and middleware
 python-multipart==0.0.6
 
-# Include base requirements
--r requirements.txt
+# Timezone support
+pytz>=2023.3
+
+# Core scientific computing (needed by data processing modules)
+numpy==1.26.4
+pandas==2.2.1
+
+# Machine learning (CPU-only, needed for model prediction)
+scikit-learn==1.4.1.post1
+tensorflow-cpu==2.16.1
+
+# Database connectivity (needed by DatabaseConnector and retrievers)
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.28
+
+# Configuration management (needed by config.py)
+python-dotenv==1.0.1

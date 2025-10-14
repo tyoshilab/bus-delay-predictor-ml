@@ -1,11 +1,12 @@
 """
-Regional Delay Router
+Regional Delay Controller - API endpoints for regional delay predictions
 
-FastAPI router for regional bus delay predictions and analysis.
+This is the Controller layer that handles HTTP requests and responses.
+Business logic is delegated to the Service layer.
 """
 
 from fastapi import APIRouter, HTTPException, status, Query
-from typing import Optional, List
+from typing import Optional
 import logging
 from datetime import datetime
 
@@ -13,36 +14,52 @@ from ..models import (
     RegionalPredictionRequest,
     RegionalPredictionResponse,
     AllRegionsResponse,
-    RankingResponse,
-    RegionsListResponse,
-    RegionInfo,
     ErrorResponse
 )
-from ..regional_delay_api import RegionalDelayPredictionAPI
+from ..database_connector import DatabaseConnector
+from ..repositories import RegionalDelayRepository
+from ..services import RegionalDelayService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Global API instance (lazy initialization)
-_api_instance: Optional[RegionalDelayPredictionAPI] = None
+# Global service instances (lazy initialization)
+_db_connector: Optional[DatabaseConnector] = None
+_regional_delay_service: Optional[RegionalDelayService] = None
 
 
-def get_api_instance():
-    """Get or create RegionalDelayPredictionAPI instance."""
-    global _api_instance
-    if _api_instance is None:
+def _initialize_services():
+    """Initialize service instances"""
+    global _db_connector, _regional_delay_service
+
+    if _db_connector is None:
         try:
-            _api_instance = RegionalDelayPredictionAPI()
-            logger.info("RegionalDelayPredictionAPI initialized successfully")
+            _db_connector = DatabaseConnector()
+            logger.info("DatabaseConnector initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize RegionalDelayPredictionAPI: {e}")
+            logger.error(f"Failed to initialize DatabaseConnector: {e}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Failed to initialize regional service: {str(e)}"
+                detail=f"Failed to initialize database connection: {str(e)}"
             )
-    return _api_instance
 
+    if _regional_delay_service is None:
+        regional_delay_repository = RegionalDelayRepository(_db_connector)
+        _regional_delay_service = RegionalDelayService(
+            regional_delay_repository
+        )
+        logger.info("RegionalDelayService initialized successfully")
+
+def get_regional_delay_service() -> RegionalDelayService:
+    """Get RegionalDelayService instance"""
+    _initialize_services()
+    return _regional_delay_service
+
+
+# ==========================================
+# Endpoints
+# ==========================================
 
 @router.post(
     "/predict",
@@ -82,8 +99,8 @@ async def predict_regional_delay(request: RegionalPredictionRequest):
             f"{request.forecast_hours} hours"
         )
 
-        api = get_api_instance()
-        result = api.predict_regional_delay(
+        service = get_regional_delay_service()
+        result = service.predict_regional_delay(
             region_id=request.region_id,
             forecast_hours=request.forecast_hours,
             lookback_days=request.lookback_days
@@ -165,9 +182,7 @@ async def predict_regional_delay_get(
     - Last update timestamp
     """
 )
-async def get_all_regions_status(
-    forecast_hours: int = Query(1, ge=1, le=12)
-):
+async def get_all_regions_status():
     """
     Get current status for all regions.
 
@@ -176,10 +191,10 @@ async def get_all_regions_status(
     try:
         logger.info("Fetching status for all regions")
 
-        api = get_api_instance()
-        result = api.get_all_regions_status(forecast_hours=forecast_hours)
+        service = get_regional_delay_service()
+        result = service.get_all_regions_status()
 
-        logger.info(f"Retrieved status for {result['total_regions']} regions")
+        # logger.info(f"Retrieved status for {result['total_regions']} regions")
 
         return result
 
@@ -189,137 +204,6 @@ async def get_all_regions_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch status: {str(e)}"
         )
-
-
-@router.get(
-    "/ranking",
-    response_model=RankingResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get regional performance ranking",
-    description="""
-    Get performance ranking for all Metro Vancouver regions.
-
-    Ranks regions by on-time performance and average delay.
-
-    **Returns:**
-    - Performance rank (1 = best)
-    - On-time rate percentage
-    - Average and median delay
-    - Performance grade (A-F)
-    - Number of routes, stops, and trips
-    """
-)
-async def get_regional_ranking():
-    """
-    Get regional performance ranking.
-
-    Ranks all regions by delay performance.
-    """
-    try:
-        logger.info("Fetching regional performance ranking")
-
-        api = get_api_instance()
-        result = api.get_regional_ranking()
-
-        logger.info(f"Retrieved ranking for {len(result['rankings'])} regions")
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Failed to fetch ranking: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch ranking: {str(e)}"
-        )
-
-
-@router.get(
-    "/regions",
-    response_model=RegionsListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="List all available regions",
-    description="""
-    Get list of all available Metro Vancouver regions.
-
-    **Returns:**
-    - Region ID and name
-    - Region type (municipality, electoral area, etc.)
-    - Geographic center coordinates
-    - Area and population
-    """
-)
-async def list_regions():
-    """
-    List all available regions.
-
-    Returns information about all Metro Vancouver municipalities.
-    """
-    try:
-        logger.info("Fetching regions list")
-
-        api = get_api_instance()
-        regions = api.region_manager.list_all_regions()
-
-        result = {
-            "total_regions": len(regions),
-            "regions": regions
-        }
-
-        logger.info(f"Retrieved {len(regions)} regions")
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Failed to fetch regions: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch regions: {str(e)}"
-        )
-
-
-@router.get(
-    "/regions/{region_id}",
-    response_model=RegionInfo,
-    status_code=status.HTTP_200_OK,
-    summary="Get region information",
-    description="Get detailed information for a specific region",
-    responses={
-        200: {"description": "Region information"},
-        404: {"model": ErrorResponse, "description": "Region not found"}
-    }
-)
-async def get_region_info(region_id: str):
-    """
-    Get information for a specific region.
-
-    Returns detailed information about the region.
-    """
-    try:
-        logger.info(f"Fetching info for region {region_id}")
-
-        api = get_api_instance()
-        region = api.region_manager.get_region_info(region_id)
-
-        if region is None:
-            available = [r['region_id'] for r in api.region_manager.list_all_regions()]
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Region '{region_id}' not found. Available regions: {available[:10]}..."
-            )
-
-        logger.info(f"Retrieved info for region {region_id}")
-
-        return region
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to fetch region info: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch region info: {str(e)}"
-        )
-
 
 @router.get(
     "/health",
@@ -334,8 +218,8 @@ async def regional_health_check():
     Verifies database connectivity and service status.
     """
     try:
-        api = get_api_instance()
-        db_ok = api.db_connector.test_connection()
+        _initialize_services()
+        db_ok = _db_connector.test_connection()
 
         return {
             "status": "healthy" if db_ok else "degraded",

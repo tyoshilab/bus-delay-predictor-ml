@@ -17,8 +17,8 @@ import pytz
 VANCOUVER_TZ = pytz.timezone('America/Vancouver')
 os.environ['TZ'] = 'America/Vancouver'
 
-# Import routers
-from .routers import delay_prediction, regional_delay
+# Import controllers (routers)
+from .controllers import regional_delay_router
 
 # Configure logging
 logging.basicConfig(
@@ -87,21 +87,20 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://frontend:3000",
+        "https://vencoucer-bus-scienmce.vercel.app"
+    ],  # In production, specify allowed origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# Include routers (controllers)
 app.include_router(
-    delay_prediction.router,
-    prefix="/api/v1/predictions",
-    tags=["Delay Predictions"]
-)
-
-app.include_router(
-    regional_delay.router,
+    regional_delay_router,
     prefix="/api/v1/regional",
     tags=["Regional Analysis"]
 )

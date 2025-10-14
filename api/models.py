@@ -120,14 +120,9 @@ class RegionalPredictionResponse(BaseModel):
 class RegionStatus(BaseModel):
     """Status for a single region."""
     region_id: str = Field(..., description="Region ID")
-    region_name: str = Field(..., description="Region name")
-    region_type: Optional[str] = Field(None, description="Region type")
-    status: str = Field(..., description="Current delay status")
-    avg_delay_minutes: Optional[float] = Field(None, description="Average delay in minutes")
-    last_updated: Optional[str] = Field(None, description="Last update timestamp")
-    trip_count: int = Field(..., description="Number of trips")
     center_lat: Optional[float] = Field(None, description="Center latitude")
     center_lon: Optional[float] = Field(None, description="Center longitude")
+    avg_delay_minutes: Optional[float] = Field(None, description="Average delay in minutes")
 
 
 class AllRegionsResponse(BaseModel):

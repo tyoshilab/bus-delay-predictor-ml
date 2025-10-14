@@ -153,6 +153,8 @@ CREATE MATERIALIZED VIEW gtfs_realtime.regional_delays_recent_mv AS
 SELECT
     r.region_id,
     r.region_name,
+    r.center_lat,
+    r.center_lon,
     DATE_TRUNC('hour', a.datetime_60) as time_bucket,
     -- 簡易統計
     COUNT(DISTINCT a.trip_id) as trip_count,
@@ -178,7 +180,7 @@ SELECT
 FROM gtfs_realtime.gtfs_rt_analytics_mv a
 JOIN gtfs_static.gtfs_stops s ON a.stop_id = s.stop_id
 JOIN gtfs_static.regions r ON s.region_id = r.region_id
-WHERE a.datetime_60 >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+WHERE a.datetime_60 >= CURRENT_TIMESTAMP - INTERVAL '360 hours'
   AND a.arrival_delay IS NOT NULL
 GROUP BY
     r.region_id,
