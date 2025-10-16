@@ -93,13 +93,9 @@ class GTFSDataRetrieverV2:
                 start_date,
                 route_id,
                 direction_id,
-                travel_time_raw_seconds,
                 arrival_delay,
-                travel_time_duration,
                 -- 統計特徴量 (事前計算済み)
-                delay_mean_by_route_hour,
-                delay_mean_by_stop_hour,
-                travel_mean_by_route_hour,
+                delay_mean_by_stop_datetime,
                 -- 時系列特徴量 (事前計算済み)
                 hour_of_day,
                 hour_sin,
@@ -108,10 +104,7 @@ class GTFSDataRetrieverV2:
                 day_cos,
                 is_peak_hour,
                 is_weekend,
-                time_period_basic,
                 -- 地理的特徴量 (事前計算済み)
-                stop_lat,
-                stop_lon,
                 region_id,
                 distance_from_downtown_km,
                 lat_sin,
@@ -120,7 +113,6 @@ class GTFSDataRetrieverV2:
                 lon_cos,
                 lat_relative,
                 lon_relative,
-                area_type,
                 area_density_score
             FROM gtfs_realtime.gtfs_rt_analytics_mv
             """
@@ -128,7 +120,6 @@ class GTFSDataRetrieverV2:
         if route_id_list is None:
             gtfs_query += """
             WHERE start_date >= %(start_date)s
-              AND travel_time_duration IS NOT NULL
             ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
             """
             params = {'start_date': start_date}
@@ -136,7 +127,6 @@ class GTFSDataRetrieverV2:
             gtfs_query += """
             WHERE route_id = ANY(%(route_ids)s)
               AND start_date >= %(start_date)s
-              AND travel_time_duration IS NOT NULL
             ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
             """
             params = {'route_ids': route_id_list, 'start_date': start_date}
