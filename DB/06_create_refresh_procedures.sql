@@ -21,9 +21,19 @@ DECLARE
     end_time TIMESTAMPTZ;
     duration NUMERIC;
     row_cnt BIGINT;
+    old_work_mem TEXT;
+    old_maintenance_work_mem TEXT;
 BEGIN
-    RAISE NOTICE 'Starting full refresh of all materialized views at %', NOW();
-
+    RAISE NOTICE 'Starting optimized full refresh at %', NOW();
+    
+    -- 現在の設定を保存
+    SELECT setting INTO old_work_mem FROM pg_settings WHERE name = 'work_mem';
+    SELECT setting INTO old_maintenance_work_mem FROM pg_settings WHERE name = 'maintenance_work_mem';
+    
+    -- リフレッシュ用に一時的にメモリを増やす
+    SET work_mem = '512MB';
+    SET maintenance_work_mem = '1GB';
+    
     -- Layer 1: Base MV
     start_time := clock_timestamp();
     UPDATE gtfs_realtime.mv_refresh_log
@@ -31,6 +41,8 @@ BEGIN
     WHERE view_name = 'gtfs_rt_base_mv';
 
     BEGIN
+        ANALYZE gtfs_realtime.gtfs_rt_stop_time_updates;
+        
         REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_base_mv;
         GET DIAGNOSTICS row_cnt = ROW_COUNT;
         end_time := clock_timestamp();
@@ -52,6 +64,9 @@ BEGIN
             error_message = SQLERRM,
             updated_at = NOW()
         WHERE view_name = 'gtfs_rt_base_mv';
+        -- 設定を元に戻す
+        EXECUTE format('SET work_mem = %L', old_work_mem);
+        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
         RAISE;
     END;
 
@@ -83,6 +98,8 @@ BEGIN
             error_message = SQLERRM,
             updated_at = NOW()
         WHERE view_name = 'gtfs_rt_enriched_mv';
+        EXECUTE format('SET work_mem = %L', old_work_mem);
+        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
         RAISE;
     END;
 
@@ -114,15 +131,21 @@ BEGIN
             error_message = SQLERRM,
             updated_at = NOW()
         WHERE view_name = 'gtfs_rt_analytics_mv';
+        EXECUTE format('SET work_mem = %L', old_work_mem);
+        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
         RAISE;
     END;
+
+    -- 設定を元に戻す
+    EXECUTE format('SET work_mem = %L', old_work_mem);
+    EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
 
     -- Update statistics
     ANALYZE gtfs_realtime.gtfs_rt_base_mv;
     ANALYZE gtfs_realtime.gtfs_rt_enriched_mv;
     ANALYZE gtfs_realtime.gtfs_rt_analytics_mv;
 
-    RAISE NOTICE 'Full refresh completed successfully at %', NOW();
+    RAISE NOTICE 'Optimized full refresh completed successfully at %', NOW();
 END;
 $$;
 

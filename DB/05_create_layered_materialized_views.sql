@@ -3,7 +3,11 @@
 -- Purpose: 3-tier architecture for optimal performance
 -- =====================================================
 -- Created: 2025-10-01
--- Version: 2.0
+-- Version: 2.1 (Optimized - removes redundant geographic calculations)
+-- Changes:
+--   - Enriched MV now uses gtfs_stops_enhanced_mv for pre-computed geo features
+--   - Analytics MV removes all redundant geographic calculations
+--   - Significant performance improvement in analytics MV creation
 -- =====================================================
 
 -- =====================================================
@@ -94,26 +98,42 @@ SELECT
     base.stop_id,
     base.stop_sequence,
     base.actual_arrival_time,
+    EXTRACT(HOUR FROM base.actual_arrival_time)::INTEGER as hour_of_day,
+    SIN(2 * PI() * EXTRACT(HOUR FROM base.actual_arrival_time) / 24) as hour_sin,
+    COS(2 * PI() * EXTRACT(HOUR FROM base.actual_arrival_time) / 24) as hour_cos,
+    SIN(2 * PI() * EXTRACT(isodow FROM base.start_date::date) / 7) as day_sin,
+    COS(2 * PI() * EXTRACT(isodow FROM base.start_date::date) / 7) as day_cos,
+    CASE WHEN EXTRACT(HOUR FROM base.actual_arrival_time) IN (7, 8, 17, 18) THEN 1 ELSE 0 END as is_peak_hour,
+    CASE WHEN EXTRACT(isodow FROM base.start_date::date) IN (6, 7) THEN 1 ELSE 0 END as is_weekend,
     base.arrival_delay,
     base.update_time,
     -- Static data enrichment
     r.route_short_name,
     t.trip_headsign,
-    s.stop_name,
-    s.stop_lat,
-    s.stop_lon,
-    s.region_id,
+    se.stop_name,
+    se.stop_lat,
+    se.stop_lon,
+    se.region_id,
     st.arrival_time as scheduled_arrival_time,
     -- Derived time features
     EXTRACT(isodow FROM base.start_date::date) as day_of_week,
-    DATE_TRUNC('hour', base.actual_arrival_time) as datetime_60
+    DATE_TRUNC('hour', base.actual_arrival_time) as datetime_60,
+    -- Pre-computed geographic features from enhanced stops MV
+    se.distance_from_downtown_km,
+    se.lat_sin,
+    se.lat_cos,
+    se.lon_sin,
+    se.lon_cos,
+    se.lat_relative,
+    se.lon_relative,
+    se.area_density_score
 FROM gtfs_realtime.gtfs_rt_base_mv base
 INNER JOIN gtfs_static.gtfs_routes r
     ON r.route_id = base.route_id
 INNER JOIN gtfs_static.gtfs_trips_static t
     ON t.trip_id = base.trip_id
-INNER JOIN gtfs_static.gtfs_stops s
-    ON s.stop_id = base.stop_id
+INNER JOIN gtfs_static.gtfs_stops_enhanced_mv se
+    ON se.stop_id = base.stop_id
 INNER JOIN gtfs_static.gtfs_stop_times st
     ON st.trip_id = base.trip_id
     AND st.stop_id = base.stop_id;
@@ -125,8 +145,14 @@ ON gtfs_realtime.gtfs_rt_enriched_mv (route_id, start_date);
 CREATE INDEX idx_gtfs_rt_enriched_mv_datetime_60
 ON gtfs_realtime.gtfs_rt_enriched_mv (datetime_60);
 
-CREATE INDEX idx_gtfs_rt_enriched_mv_query_optimization
-ON gtfs_realtime.gtfs_rt_enriched_mv (route_id, start_date, trip_id, stop_sequence);
+CREATE INDEX idx_gtfs_rt_enriched_mv_query_optimization_1
+ON gtfs_realtime.gtfs_rt_enriched_mv (route_id, direction_id, stop_id, stop_sequence, datetime_60);
+
+CREATE INDEX idx_gtfs_rt_enriched_mv_query_optimization_2
+ON gtfs_realtime.gtfs_rt_enriched_mv (route_id, direction_id, hour_of_day);
+
+CREATE INDEX idx_gtfs_rt_enriched_mv_query_optimization_3
+ON gtfs_realtime.gtfs_rt_enriched_mv (stop_id, stop_sequence, hour_of_day);
 
 ANALYZE gtfs_realtime.gtfs_rt_enriched_mv;
 
@@ -136,158 +162,68 @@ ANALYZE gtfs_realtime.gtfs_rt_enriched_mv;
 -- Purpose: Fully processed data with all features for ML/analytics
 -- Refresh: Low frequency (nightly batch or on-demand)
 -- Size: Larger due to additional computed columns
+-- Changes: Removed redundant geographic calculations (now sourced from enriched_mv)
 -- =====================================================
 
 DROP MATERIALIZED VIEW IF EXISTS gtfs_realtime.gtfs_rt_analytics_mv CASCADE;
 
 CREATE MATERIALIZED VIEW gtfs_realtime.gtfs_rt_analytics_mv AS
-WITH travel_time_calc AS (
-    SELECT
-        *,
-        EXTRACT(EPOCH FROM (
-            actual_arrival_time - LAG(actual_arrival_time)
-            OVER (PARTITION BY start_date, route_id, trip_id ORDER BY stop_sequence)
-        )) as travel_time_raw_seconds
-    FROM gtfs_realtime.gtfs_rt_enriched_mv
-),
-filtered AS (
-    SELECT *,
-        CASE
-            WHEN travel_time_raw_seconds BETWEEN 10 AND 3600
-            THEN travel_time_raw_seconds
-            ELSE NULL
-        END as travel_time_duration
-    FROM travel_time_calc
-),
-route_hour_stats AS (
-    SELECT
+WITH 
+-- route_hour_stats AS (
+--     SELECT
+--         route_id,
+--         direction_id,
+--         hour_of_day,
+--         AVG(arrival_delay) as delay_mean_by_route_hour,
+--         COUNT(*) as sample_count
+--     FROM gtfs_realtime.gtfs_rt_enriched_mv
+--     GROUP BY route_id, direction_id, hour_of_day
+--     HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
+-- ),
+-- stop_hour_stats AS (
+--     SELECT
+--         stop_id,
+--         stop_sequence,
+--         hour_of_day,
+--         AVG(arrival_delay) as delay_mean_by_stop_hour,
+--         COUNT(*) as sample_count
+--     FROM gtfs_realtime.gtfs_rt_enriched_mv
+--     GROUP BY stop_id, stop_sequence, hour_of_day
+--     HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
+-- ),
+gtfs_status AS (
+    select 
         route_id,
-        direction_id,
-        EXTRACT(HOUR FROM actual_arrival_time) as hour_of_day,
-        AVG(arrival_delay) as delay_mean_by_route_hour,
-        AVG(travel_time_duration) as travel_mean_by_route_hour,
-        COUNT(*) as sample_count
-    FROM filtered
-    WHERE travel_time_duration IS NOT NULL
-    GROUP BY route_id, direction_id, EXTRACT(HOUR FROM actual_arrival_time)
-    HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
-),
-stop_hour_stats AS (
-    SELECT
+        direction_id, 
         stop_id,
         stop_sequence,
-        EXTRACT(HOUR FROM actual_arrival_time) as hour_of_day,
-        AVG(arrival_delay) as delay_mean_by_stop_hour,
-        COUNT(*) as sample_count
-    FROM filtered
-    GROUP BY stop_id, stop_sequence, EXTRACT(HOUR FROM actual_arrival_time)
-    HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
+        datetime_60,
+        day_of_week,
+        AVG(arrival_delay) as delay_mean_by_stop_datetime
+    FROM gtfs_realtime.gtfs_rt_enriched_mv gtfs
+    GROUP BY route_id, direction_id, stop_id, stop_sequence, datetime_60, day_of_week
 )
 SELECT
-    f.id,
-    f.route_id,
-    f.trip_id,
-    f.start_date,
-    f.direction_id,
-    f.stop_id,
-    f.stop_sequence,
-    f.actual_arrival_time,
-    f.datetime_60,
-    f.arrival_delay,
-    f.travel_time_raw_seconds,
-    f.travel_time_duration,
-    f.route_short_name,
-    f.trip_headsign,
-    f.stop_name,
-    f.stop_lat,
-    f.stop_lon,
-    f.region_id,
-    f.scheduled_arrival_time,
-    f.day_of_week,
+    f.*,
     -- Statistical features (previously computed in Python)
-    rhs.delay_mean_by_route_hour,
-    rhs.travel_mean_by_route_hour,
-    shs.delay_mean_by_stop_hour,
-    -- Time-based features (previously computed in Python)
-    EXTRACT(HOUR FROM f.actual_arrival_time)::INTEGER as hour_of_day,
-    SIN(2 * PI() * EXTRACT(HOUR FROM f.actual_arrival_time) / 24) as hour_sin,
-    COS(2 * PI() * EXTRACT(HOUR FROM f.actual_arrival_time) / 24) as hour_cos,
-    SIN(2 * PI() * f.day_of_week / 7) as day_sin,
-    COS(2 * PI() * f.day_of_week / 7) as day_cos,
-    -- Categorical time features
-    CASE WHEN EXTRACT(HOUR FROM f.actual_arrival_time) IN (7, 8, 17, 18) THEN 1 ELSE 0 END as is_peak_hour,
-    CASE WHEN f.day_of_week IN (6, 7) THEN 1 ELSE 0 END as is_weekend,
-    CASE
-        WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 0 AND 5 THEN 'Late_Night'
-        WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 6 AND 8 THEN 'Morning'
-        WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 9 AND 11 THEN 'Midday'
-        WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 12 AND 16 THEN 'Afternoon'
-        WHEN EXTRACT(HOUR FROM f.actual_arrival_time) BETWEEN 17 AND 19 THEN 'Evening'
-        ELSE 'Night'
-    END as time_period_basic,
-    -- Geographic features (lat/lon encoding and area categorization)
-    -- Vancouver Downtown reference point: 49.2827°N, 123.1207°W
-    -- Distance from downtown (in km using Haversine approximation)
-    ROUND(
-        6371 * ACOS(
-            COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
-            COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
-            SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat))
-        )::NUMERIC, 2
-    ) as distance_from_downtown_km,
-    -- Lat/Lon sin/cos encoding (preserves spatial relationships)
-    SIN(RADIANS(f.stop_lat)) as lat_sin,
-    COS(RADIANS(f.stop_lat)) as lat_cos,
-    SIN(RADIANS(f.stop_lon)) as lon_sin,
-    COS(RADIANS(f.stop_lon)) as lon_cos,
-    -- Relative coordinates from downtown
-    ROUND((f.stop_lat - 49.2827)::NUMERIC, 4) as lat_relative,
-    ROUND((f.stop_lon - (-123.1207))::NUMERIC, 4) as lon_relative,
-    -- Broader area categorization based on distance and region
-    CASE
-        WHEN f.region_id IN ('vancouver', 'burnaby', 'new_westminster')
-             AND ROUND(6371 * ACOS(COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
-                       COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
-                       SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat)))::NUMERIC, 2) < 5
-             THEN 'urban_core'
-        WHEN f.region_id IN ('vancouver', 'burnaby', 'richmond', 'new_westminster', 'north_vancouver_city', 'north_vancouver_district')
-             THEN 'urban'
-        WHEN f.region_id IN ('surrey', 'coquitlam', 'port_coquitlam', 'port_moody', 'west_vancouver', 'delta')
-             THEN 'suburban'
-        WHEN f.region_id IN ('langley_city', 'langley_township', 'maple_ridge', 'pitt_meadows', 'white_rock')
-             THEN 'suburban_outer'
-        WHEN f.region_id IN ('lions_bay', 'belcarra', 'anmore', 'bowen_island')
-             THEN 'rural'
-        ELSE 'unclassified'
-    END as area_type,
-    -- Region density score (1=rural, 2=suburban_outer, 3=suburban, 4=urban, 5=urban_core)
-    CASE
-        WHEN f.region_id IN ('vancouver', 'burnaby', 'new_westminster')
-             AND ROUND(6371 * ACOS(COS(RADIANS(49.2827)) * COS(RADIANS(f.stop_lat)) *
-                       COS(RADIANS(f.stop_lon) - RADIANS(-123.1207)) +
-                       SIN(RADIANS(49.2827)) * SIN(RADIANS(f.stop_lat)))::NUMERIC, 2) < 5
-             THEN 5
-        WHEN f.region_id IN ('vancouver', 'burnaby', 'richmond', 'new_westminster', 'north_vancouver_city', 'north_vancouver_district')
-             THEN 4
-        WHEN f.region_id IN ('surrey', 'coquitlam', 'port_coquitlam', 'port_moody', 'west_vancouver', 'delta')
-             THEN 3
-        WHEN f.region_id IN ('langley_city', 'langley_township', 'maple_ridge', 'pitt_meadows', 'white_rock')
-             THEN 2
-        WHEN f.region_id IN ('lions_bay', 'belcarra', 'anmore', 'bowen_island')
-             THEN 1
-        ELSE 0
-    END as area_density_score
-FROM filtered f
-LEFT JOIN route_hour_stats rhs
-    ON f.route_id = rhs.route_id
-    AND f.direction_id = rhs.direction_id
-    AND EXTRACT(HOUR FROM f.actual_arrival_time) = rhs.hour_of_day
-LEFT JOIN stop_hour_stats shs
-    ON f.stop_id = shs.stop_id
-    AND f.stop_sequence = shs.stop_sequence
-    AND EXTRACT(HOUR FROM f.actual_arrival_time) = shs.hour_of_day
-WHERE f.travel_time_duration IS NOT NULL
-   OR f.travel_time_raw_seconds IS NULL;  -- Keep first stop of each trip
+    gs.delay_mean_by_stop_datetime
+    -- rhs.delay_mean_by_route_hour,
+    -- shs.delay_mean_by_stop_hour
+FROM gtfs_realtime.gtfs_rt_enriched_mv f
+INNER JOIN gtfs_status gs
+    ON f.route_id = gs.route_id
+    AND f.direction_id = gs.direction_id
+    AND f.stop_id = gs.stop_id
+    AND f.stop_sequence = gs.stop_sequence
+    AND f.datetime_60 = gs.datetime_60
+-- LEFT JOIN route_hour_stats rhs
+--     ON f.route_id = rhs.route_id
+--     AND f.direction_id = rhs.direction_id
+--     AND f.hour_of_day = rhs.hour_of_day
+-- LEFT JOIN stop_hour_stats shs
+--     ON f.stop_id = shs.stop_id
+--     AND f.stop_sequence = shs.stop_sequence
+--     AND f.hour_of_day = shs.hour_of_day;
 
 -- Performance indexes
 CREATE INDEX idx_gtfs_rt_analytics_mv_route_date
