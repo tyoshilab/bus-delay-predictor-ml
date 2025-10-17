@@ -220,28 +220,54 @@ class DataSplitter:
                 'total_unique_routes': len(set(train_route_dirs + test_route_dirs))
             }
         
+        # Helper function to check for NaN values safely
+        def safe_isnan_check(arr):
+            """Check for NaN values, handling non-numeric types."""
+            if arr is None:
+                return False
+            try:
+                # For numeric types
+                if np.issubdtype(arr.dtype, np.number):
+                    return np.isnan(arr).any()
+                # For object/string types, check for None or NaN objects
+                elif arr.dtype == object:
+                    return any(x is None or (isinstance(x, float) and np.isnan(x)) 
+                              for x in arr.flat)
+                else:
+                    return False
+            except (TypeError, AttributeError):
+                return False
+        
         # NaNチェック
         validation_results['nan_check'] = {
-            'X_train_has_nan': np.isnan(X_train).any(),
-            'X_test_has_nan': np.isnan(X_test).any(),
-            'y_train_has_nan': np.isnan(y_train).any(),
-            'y_test_has_nan': np.isnan(y_test).any()
+            'X_train_has_nan': safe_isnan_check(X_train),
+            'X_test_has_nan': safe_isnan_check(X_test),
+            'y_train_has_nan': safe_isnan_check(y_train),
+            'y_test_has_nan': safe_isnan_check(y_test)
         }
+        
+        # Helper function to safely compute statistics
+        def safe_stats(arr):
+            """Compute statistics safely, handling non-numeric types."""
+            if arr is None:
+                return {'mean': None, 'std': None, 'min': None, 'max': None}
+            try:
+                if np.issubdtype(arr.dtype, np.number):
+                    return {
+                        'mean': float(np.mean(arr)),
+                        'std': float(np.std(arr)),
+                        'min': float(np.min(arr)),
+                        'max': float(np.max(arr))
+                    }
+                else:
+                    return {'mean': None, 'std': None, 'min': None, 'max': None}
+            except (TypeError, ValueError):
+                return {'mean': None, 'std': None, 'min': None, 'max': None}
         
         # 統計情報
         validation_results['statistics'] = {
-            'X_train': {
-                'mean': np.mean(X_train),
-                'std': np.std(X_train),
-                'min': np.min(X_train),
-                'max': np.max(X_train)
-            },
-            'y_train': {
-                'mean': np.mean(y_train),
-                'std': np.std(y_train),
-                'min': np.min(y_train),
-                'max': np.max(y_train)
-            }
+            'X_train': safe_stats(X_train),
+            'y_train': safe_stats(y_train)
         }
         
         return validation_results
