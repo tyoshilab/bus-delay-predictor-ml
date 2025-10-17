@@ -19,14 +19,39 @@ class GTFSDataRetrieverV2:
         """
         self.db_connector = db_connector
 
-    def get_gtfs_data(self, route_id=None, start_date='20250818', use_analytics_mv=True):
+    def _convert_timezone_fast(self, df, columns):
+        """
+        タイムゾーン変換を高速に実行（ベクトル化処理）
+
+        Args:
+            df (pd.DataFrame): データフレーム（in-place更新）
+            columns (list): 変換対象のカラム名リスト
+        """
+        for col in columns:
+            if col not in df.columns:
+                continue
+
+            # すでにdatetime型の場合
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                if df[col].dt.tz is None:
+                    df[col] = df[col].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
+                else:
+                    # タイムゾーンが設定されている場合は、Vancouver以外なら変換
+                    tz_str = str(df[col].dt.tz)
+                    if 'Vancouver' not in tz_str and 'America/Vancouver' != tz_str:
+                        df[col] = df[col].dt.tz_convert('America/Vancouver')
+            # datetime型でない場合は変換
+            else:
+                df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert('America/Vancouver')
+
+    def get_gtfs_data(self, route_id=None, start_date='20250818', end_date=None):
         """
         バンクーバー遅延予測用GTFSデータを取得
 
         Args:
             route_id (str or list): 路線ID（単一文字列または複数IDのリスト）
             start_date (str): 開始日 (YYYYMMDD形式)
-            use_analytics_mv (bool): Analytics MVを使用するか（False=Enriched MVのみ）
+            end_date (str, optional): 終了日 (YYYYMMDD形式)。指定しない場合は制限なし
 
         Returns:
             pd.DataFrame: GTFSデータ
@@ -40,35 +65,15 @@ class GTFSDataRetrieverV2:
             route_id_list = None
 
         print(f"Retrieving Vancouver delay prediction GTFS data for routes: {route_id_list}...")
-        print(f"Data source: {'Analytics MV (fully processed)' if use_analytics_mv else 'Enriched MV (minimal processing)'}")
+        print(f"Date range: {start_date}" + (f" to {end_date}" if end_date else " (no end limit)"))
+        print(f"Data source: Analytics MV (fully processed)")
 
-        if use_analytics_mv:
-            # Analytics MV: すべての特徴量が事前計算済み
-            gtfs_data = self._get_from_analytics_mv(route_id_list, start_date)
-        else:
-            # Enriched MV: 基本的な特徴量のみ（Python側で追加処理が必要）
-            gtfs_data = self._get_from_enriched_mv(route_id_list, start_date)
+        gtfs_data = self._get_from_analytics_mv(route_id_list, start_date)
 
-        # タイムゾーン変換
-        if 'datetime' in gtfs_data.columns:
-            # datetime型でない場合は変換
-            if not pd.api.types.is_datetime64_any_dtype(gtfs_data['datetime']):
-                gtfs_data['datetime'] = pd.to_datetime(gtfs_data['datetime'])
-            # タイムゾーンがない場合はUTCとして扱い、Vancouverに変換
-            if gtfs_data['datetime'].dt.tz is None:
-                gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
-            else:
-                gtfs_data['datetime'] = gtfs_data['datetime'].dt.tz_convert('America/Vancouver')
-
-        if 'datetime_60' in gtfs_data.columns:
-            # datetime型でない場合は変換
-            if not pd.api.types.is_datetime64_any_dtype(gtfs_data['datetime_60']):
-                gtfs_data['datetime_60'] = pd.to_datetime(gtfs_data['datetime_60'])
-            # タイムゾーンがない場合はUTCとして扱い、Vancouverに変換
-            if gtfs_data['datetime_60'].dt.tz is None:
-                gtfs_data['datetime_60'] = gtfs_data['datetime_60'].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
-            else:
-                gtfs_data['datetime_60'] = gtfs_data['datetime_60'].dt.tz_convert('America/Vancouver')
+        print("Successfully retrieved raw data.")
+        
+        # タイムゾーン変換（ベクトル化された高速処理）
+        self._convert_timezone_fast(gtfs_data, ['datetime', 'datetime_60'])
 
         print(f"Retrieved {len(gtfs_data):,} records")
         return gtfs_data
@@ -82,6 +87,8 @@ class GTFSDataRetrieverV2:
         - Python側での集約処理が不要
         - 最も高速だが、MVの更新頻度に依存
         """
+        import time
+
         gtfs_query = """
             SELECT
                 actual_arrival_time as datetime,
@@ -130,61 +137,66 @@ class GTFSDataRetrieverV2:
             ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
             """
             params = {'route_ids': route_id_list, 'start_date': start_date}
-        
-        return self.db_connector.read_sql(gtfs_query, params=params)
 
-    def _get_from_enriched_mv(self, route_id_list, start_date):
-        """
-        Enriched MVから基本データを取得（レガシー互換用）
+        # 詳細なタイミング計測
+        start_time = time.time()
+        print("  [1/3] Executing SQL query...")
 
-        特徴:
-        - 基本的な特徴量のみ
-        - 統計特徴量・時系列特徴量はPython側で計算が必要
-        - より新鮮なデータが必要な場合に使用
-        """
-        gtfs_query = """
-        WITH travel_time_calc AS (
-            SELECT
-                *,
-                EXTRACT(EPOCH FROM (
-                    actual_arrival_time - LAG(actual_arrival_time)
-                    OVER (PARTITION BY start_date, route_id, trip_id ORDER BY stop_sequence)
-                )) as travel_time_raw_seconds
-            FROM gtfs_realtime.gtfs_rt_enriched_mv
-            WHERE route_id = ANY(%(route_ids)s)
-              AND start_date >= %(start_date)s
-        ),
-        filtered AS (
-            SELECT *,
-                CASE
-                    WHEN travel_time_raw_seconds BETWEEN 10 AND 3600
-                    THEN travel_time_raw_seconds
-                    ELSE NULL
-                END as travel_time_duration
-            FROM travel_time_calc
-            WHERE arrival_delay BETWEEN -3600 AND 3600
+        # データ型を明示的に指定して高速化
+        dtype_spec = {
+            'day_of_week': 'int16',
+            'line_direction_link_order': 'int16',
+            'trip_id': 'str',
+            'stop_id': 'str',
+            'start_date': 'str',
+            'route_id': 'str',
+            'direction_id': 'int8',
+            'arrival_delay': 'float32',
+            'delay_mean_by_stop_datetime': 'float32',
+            'hour_of_day': 'int8',
+            'hour_sin': 'float32',
+            'hour_cos': 'float32',
+            'day_sin': 'float32',
+            'day_cos': 'float32',
+            'is_peak_hour': 'bool',
+            'is_weekend': 'bool',
+            'region_id': 'str',
+            'distance_from_downtown_km': 'float32',
+            'lat_sin': 'float32',
+            'lat_cos': 'float32',
+            'lon_sin': 'float32',
+            'lon_cos': 'float32',
+            'lat_relative': 'float32',
+            'lon_relative': 'float32',
+            'area_density_score': 'float32'
+        }
+
+        result = self.db_connector.read_sql(
+            gtfs_query,
+            params=params,
+            parse_dates=['datetime', 'datetime_60'],
+            convert_tz=False,  # 後でまとめて変換するのでここではスキップ
+            debug=True  # デバッグ情報を表示
+            # use_server_cursor は逆効果なので無効化
         )
-        SELECT
-            actual_arrival_time as datetime,
-            datetime_60,
-            day_of_week,
-            stop_sequence as line_direction_link_order,
-            trip_id,
-            stop_id,
-            start_date,
-            route_id,
-            direction_id,
-            travel_time_raw_seconds,
-            arrival_delay,
-            travel_time_duration
-        FROM filtered
-        WHERE travel_time_duration IS NOT NULL
-           OR travel_time_raw_seconds IS NULL
-        ORDER BY route_id, direction_id, start_date, trip_id, line_direction_link_order
-        """
 
-        params = {'route_ids': route_id_list, 'start_date': start_date}
-        return self.db_connector.read_sql(gtfs_query, params=params)
+        query_time = time.time() - start_time
+        print(f"  [2/3] SQL executed in {query_time:.2f}s, converting dtypes...")
+
+        # データ型変換
+        dtype_start = time.time()
+        for col, dtype in dtype_spec.items():
+            if col in result.columns:
+                try:
+                    result[col] = result[col].astype(dtype)
+                except:
+                    pass  # 変換失敗時はスキップ
+
+        dtype_time = time.time() - dtype_start
+        print(f"  [3/3] Dtype conversion done in {dtype_time:.2f}s")
+        print(f"  Total time: {time.time() - start_time:.2f}s")
+
+        return result
 
     def get_gtfs_data_summary(self, route_id=['6612'], start_date='20250818'):
         """
