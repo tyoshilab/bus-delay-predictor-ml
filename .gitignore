@@ -14,6 +14,9 @@ data/**/*.csv
 # 気象データ
 climate/downloads/*.csv
 
+# ===== 分析ファイル =====
+files/analysis/
+
 # ===== 機械学習モデル =====
 *.h5
 *.hdf5
