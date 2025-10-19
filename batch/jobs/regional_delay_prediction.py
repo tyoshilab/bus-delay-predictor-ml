@@ -382,33 +382,3 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             self.logger.info("\nResults by region:")
             for region_id, count in region_results.items():
                 self.logger.info(f"  {region_id}: {count} predictions")
-
-
-# 後方互換性のためのラッパー（非推奨）
-class RegionalDelayPredictionJobWrapper:
-    """
-    後方互換性のためのラッパークラス（非推奨）
-
-    従来の run() インターフェースをサポートしますが、
-    新しいコードでは RegionalDelayPredictionJob を直接使用し、
-    execute() メソッドを呼び出してください。
-    """
-
-    def __init__(self, *args, **kwargs):
-        import warnings
-        warnings.warn(
-            "RegionalDelayPredictionJobWrapper is deprecated. "
-            "Use RegionalDelayPredictionJob with execute() method instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        self._job = RegionalDelayPredictionJob(*args, **kwargs)
-
-    def run(self, regions=None, dry_run=False):
-        """従来のrun()インターフェース（非推奨）"""
-        result = self._job.execute(regions=regions, dry_run=dry_run)
-        return result.get('region_results', {})
-
-    def __getattr__(self, name):
-        """その他のメソッド呼び出しを委譲"""
-        return getattr(self._job, name)
