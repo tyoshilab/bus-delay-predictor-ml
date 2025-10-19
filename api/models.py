@@ -89,32 +89,64 @@ class RoutePredictionResponse(BaseModel):
         }
 
 
-class RegionalForecast(BaseModel):
-    """Individual regional forecast."""
-    forecast_time: str = Field(..., description="Forecast timestamp")
-    hour_of_day: int = Field(..., description="Hour of day (0-23)")
-    day_of_week: int = Field(..., description="Day of week (0=Monday, 6=Sunday)")
-    avg_delay_minutes: float = Field(..., description="Average delay in minutes")
-    median_delay_minutes: float = Field(..., description="Median delay in minutes")
-    probability_delay_over_5min: float = Field(..., description="Probability of >5min delay (%)")
-    status: str = Field(..., description="Delay status: excellent, good, moderate, poor, severe")
+class StopPrediction(BaseModel):
+    """Prediction for a single stop."""
+    stop_id: str = Field(..., description="Stop ID")
+    stop_name: Optional[str] = Field(None, description="Stop name")
+    stop_lat: Optional[float] = Field(None, description="Stop latitude")
+    stop_lon: Optional[float] = Field(None, description="Stop longitude")
+    route_id: str = Field(..., description="Route ID")
+    direction_id: int = Field(..., description="Direction ID")
+    hour_predictions: List[DelayPrediction] = Field(..., description="Hourly predictions for next 3 hours")
 
-
-class RegionalPredictionSummary(BaseModel):
-    """Summary statistics for regional prediction."""
-    avg_delay_next_3h: float = Field(..., description="Average delay for next 3 hours")
-    overall_status: str = Field(..., description="Overall delay status")
+    class Config:
+        schema_extra = {
+            "example": {
+                "stop_id": "12345",
+                "stop_name": "Main St @ 1st Ave",
+                "stop_lat": 49.2827,
+                "stop_lon": -123.1207,
+                "route_id": "6618",
+                "direction_id": 0,
+                "hour_predictions": [
+                    {"time": "2025-10-01 14:00:00", "delay_seconds": 120.5, "delay_minutes": 2.01},
+                    {"time": "2025-10-01 15:00:00", "delay_seconds": 135.0, "delay_minutes": 2.25},
+                    {"time": "2025-10-01 16:00:00", "delay_seconds": 150.0, "delay_minutes": 2.50}
+                ]
+            }
+        }
 
 
 class RegionalPredictionResponse(BaseModel):
     """Response model for regional delay prediction."""
     region_id: str = Field(..., description="Region ID")
-    region_name: str = Field(..., description="Region name")
-    region_type: Optional[str] = Field(None, description="Region type")
     current_time: str = Field(..., description="Current timestamp")
-    lookback_period_days: int = Field(..., description="Lookback period in days")
-    predictions: List[RegionalForecast] = Field(..., description="Forecast predictions")
-    summary: RegionalPredictionSummary = Field(..., description="Summary statistics")
+    forecast_hours: int = Field(..., description="Number of forecast hours")
+    total_stops: int = Field(..., description="Total number of stops with predictions")
+    predictions: List[StopPrediction] = Field(..., description="Per-stop predictions")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "region_id": "vancouver",
+                "current_time": "2025-10-01 13:00:00",
+                "forecast_hours": 3,
+                "total_stops": 150,
+                "predictions": [
+                    {
+                        "stop_id": "12345",
+                        "stop_name": "Main St @ 1st Ave",
+                        "stop_lat": 49.2827,
+                        "stop_lon": -123.1207,
+                        "route_id": "6618",
+                        "direction_id": 0,
+                        "hour_predictions": [
+                            {"time": "2025-10-01 14:00:00", "delay_seconds": 120.5, "delay_minutes": 2.01}
+                        ]
+                    }
+                ]
+            }
+        }
 
 
 class RegionStatus(BaseModel):

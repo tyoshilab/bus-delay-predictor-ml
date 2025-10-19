@@ -13,12 +13,13 @@ from datetime import datetime
 from ..models import (
     RegionalPredictionRequest,
     RegionalPredictionResponse,
+    StopPrediction,
     AllRegionsResponse,
     ErrorResponse
 )
 from ..database_connector import DatabaseConnector
 from ..repositories import RegionalDelayRepository
-from ..services import RegionalDelayService
+from ..services import RegionalDelayService, DelayPredictService
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,12 @@ router = APIRouter()
 # Global service instances (lazy initialization)
 _db_connector: Optional[DatabaseConnector] = None
 _regional_delay_service: Optional[RegionalDelayService] = None
+_delay_predict_service: Optional[DelayPredictService] = None
 
 
 def _initialize_services():
     """Initialize service instances"""
-    global _db_connector, _regional_delay_service
+    global _db_connector, _regional_delay_service, _delay_predict_service
 
     if _db_connector is None:
         try:
@@ -51,118 +53,90 @@ def _initialize_services():
         )
         logger.info("RegionalDelayService initialized successfully")
 
+    if _delay_predict_service is None:
+        delay_predict_repository = RegionalDelayRepository(_db_connector)
+        _delay_predict_service = DelayPredictService(
+            delay_predict_repository
+        )
+        logger.info("DelayPredictService initialized successfully")
+
 def get_regional_delay_service() -> RegionalDelayService:
     """Get RegionalDelayService instance"""
     _initialize_services()
     return _regional_delay_service
 
+def get_delay_predict_service() -> DelayPredictService:
+    """Get DelayPredictService instance"""
+    _initialize_services()
+    return _delay_predict_service
 
 # ==========================================
 # Endpoints
 # ==========================================
 
-@router.post(
-    "/predict",
-    response_model=RegionalPredictionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Predict regional delays",
-    description="""
-    Predict bus delays for a specific Metro Vancouver region.
-
-    Uses historical patterns from the same time of day and week.
-
-    **Parameters:**
-    - **region_id**: Region identifier (e.g., 'vancouver', 'burnaby')
-    - **forecast_hours**: Hours to forecast (1-12, default: 3)
-    - **lookback_days**: Days of historical data (1-30, default: 7)
-
-    **Returns:**
-    - Hourly forecasts for the specified period
-    - Summary statistics and delay status
-    """,
-    responses={
-        200: {"description": "Successful prediction"},
-        400: {"model": ErrorResponse, "description": "Invalid request"},
-        404: {"model": ErrorResponse, "description": "Region not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
-)
-async def predict_regional_delay(request: RegionalPredictionRequest):
-    """
-    Predict delays for a specific region.
-
-    Returns hourly forecasts based on historical patterns.
-    """
-    try:
-        logger.info(
-            f"Predicting regional delay for {request.region_id}, "
-            f"{request.forecast_hours} hours"
-        )
-
-        service = get_regional_delay_service()
-        result = service.predict_regional_delay(
-            region_id=request.region_id,
-            forecast_hours=request.forecast_hours,
-            lookback_days=request.lookback_days
-        )
-
-        if "error" in result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=result["error"]
-            )
-
-        logger.info(
-            f"Prediction successful for region {request.region_id}: "
-            f"{len(result['predictions'])} timesteps"
-        )
-
-        return result
-
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.warning(f"Validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Regional prediction failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
-        )
-
-
 @router.get(
     "/predict/{region_id}",
     response_model=RegionalPredictionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Predict regional delays (GET method)",
-    description="Predict bus delays for a region using GET method",
+    summary="Get regional delay predictions per stop",
+    description="""
+    Get latest batch-predicted bus delays for all stops in a region.
+
+    **How it works:**
+    - Fetches latest predictions from batch processing job
+    - Batch job runs periodically using ConvLSTM model
+    - Returns predictions per stop with route and location information
+    - Forecasts available for next 1-3 hours
+
+    **Data source:** Pre-computed predictions from regional_delay_predictions table
+    """,
     responses={
-        200: {"description": "Successful prediction"},
-        404: {"model": ErrorResponse, "description": "Region not found"},
+        200: {"description": "Latest predictions with per-stop forecasts"},
+        404: {"model": ErrorResponse, "description": "Region not found or no predictions available"},
         500: {"model": ErrorResponse, "description": "Internal server error"}
     }
 )
 async def predict_regional_delay_get(
     region_id: str,
-    forecast_hours: int = Query(3, ge=1, le=12),
-    lookback_days: int = Query(7, ge=1, le=30)
+    forecast_hours: int = Query(
+        3,
+        ge=1,
+        le=3,
+        description="Number of hours to forecast (1-3)"
+    )
 ):
     """
-    Predict regional delays using GET method.
+    Get latest batch-predicted regional delays per stop.
 
-    Simpler endpoint for GET requests.
+    Fetches pre-computed predictions from the batch processing job.
+    Predictions are updated periodically by the regional delay prediction batch job.
+
+    Args:
+        region_id: Region identifier (e.g., 'vancouver', 'burnaby')
+        forecast_hours: Number of hours to forecast (default: 3)
+
+    Returns:
+        Per-stop predictions with route, location, and hourly delay forecasts
     """
-    request = RegionalPredictionRequest(
-        region_id=region_id,
-        forecast_hours=forecast_hours,
-        lookback_days=lookback_days
-    )
-    return await predict_regional_delay(request)
+    try:
+        logger.info(f"Fetching predictions for region '{region_id}' for next {forecast_hours} hours")
+
+        service = get_delay_predict_service()
+        result = await service.predict_regional_delay(
+            region_id=region_id,
+            forecast_hours=forecast_hours
+        )
+
+        logger.info(f"Successfully fetched predictions for {result['total_stops']} stops")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to fetch regional predictions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch predictions: {str(e)}"
+        )
 
 
 @router.get(
