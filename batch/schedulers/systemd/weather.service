@@ -1,0 +1,35 @@
+[Unit]
+Description=Weather Data Scraping Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=taita
+Group=taita
+WorkingDirectory=/home/taita/repository/DataScience/class/GTFS
+
+# 環境変数の読み込み
+EnvironmentFile=/home/taita/repository/DataScience/class/GTFS/.env
+
+# ジョブ実行
+ExecStart=/usr/bin/python3 batch/run.py scrape-weather
+
+# リソース制限
+MemoryMax=2G
+CPUQuota=100%
+
+# ログ設定（アプリケーションログは batch/logs/ に出力される）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=weather-scraper
+
+# タイムアウト設定（10分）
+TimeoutStartSec=600
+
+# 失敗時の再起動設定
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

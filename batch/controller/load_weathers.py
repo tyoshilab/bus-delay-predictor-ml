@@ -10,10 +10,11 @@ import pandas as pd
 import logging
 import argparse
 from pathlib import Path
+# Add project root to sys.path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Add parent directory to path to import DatabaseConnector
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.data_connection.database_connector import DatabaseConnector
+sys.path.insert(0, project_root)
+from batch.config.database_connector import DatabaseConnector
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -75,6 +76,7 @@ def load_weather_csv_to_table(csv_path: str, table_name: str, db_connector: Data
             with db_connector.engine.connect() as conn:
                 df.to_sql(table_name, conn, if_exists='append', index=False, method='multi', schema='climate')
             logger.info(f"Successfully loaded {len(df)} new rows into {table_name}")
+            return len(df)
         else:
             logger.info("No new data to load")
         

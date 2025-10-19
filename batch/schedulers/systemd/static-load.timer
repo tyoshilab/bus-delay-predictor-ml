@@ -1,0 +1,18 @@
+[Unit]
+Description=GTFS Static Data Load Timer
+Requires=static-load.service
+
+[Timer]
+# 毎週日曜日の午前3時に実行
+OnCalendar=Sun *-*-* 03:00:00
+
+# システム起動後1時間で初回実行
+OnBootSec=1h
+
+# 前回の実行が完了してから次を開始
+Persistent=true
+
+Unit=static-load.service
+
+[Install]
+WantedBy=timers.target

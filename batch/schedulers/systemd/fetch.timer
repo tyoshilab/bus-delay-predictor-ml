@@ -1,0 +1,18 @@
+[Unit]
+Description=GTFS Realtime Data Fetch Timer
+Requires=fetch.service
+
+[Timer]
+# 5分ごとに実行
+OnCalendar=*:0/5
+
+# システム起動後5分で初回実行
+OnBootSec=5min
+
+# 前回の実行が完了してから次を開始
+Persistent=true
+
+Unit=fetch.service
+
+[Install]
+WantedBy=timers.target

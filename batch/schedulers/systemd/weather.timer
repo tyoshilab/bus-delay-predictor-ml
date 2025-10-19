@@ -1,0 +1,18 @@
+[Unit]
+Description=Weather Data Scraping Timer
+Requires=weather.service
+
+[Timer]
+# 毎時0分に実行
+OnCalendar=hourly
+
+# システム起動後15分で初回実行
+OnBootSec=15min
+
+# 前回の実行が完了してから次を開始
+Persistent=true
+
+Unit=weather.service
+
+[Install]
+WantedBy=timers.target

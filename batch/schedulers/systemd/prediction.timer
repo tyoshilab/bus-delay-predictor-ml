@@ -1,0 +1,18 @@
+[Unit]
+Description=Regional Bus Delay Prediction Timer
+Requires=prediction.service
+
+[Timer]
+# 毎時0分に実行
+OnCalendar=hourly
+
+# システム起動後10分で初回実行
+OnBootSec=10min
+
+# 前回の実行が完了してから次を開始
+Persistent=true
+
+Unit=prediction.service
+
+[Install]
+WantedBy=timers.target

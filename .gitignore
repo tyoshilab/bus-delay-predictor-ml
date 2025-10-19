@@ -7,12 +7,18 @@
 *password*
 *credentials*
 
+# ===== docファイル =====
+doc/
+
 # ===== データファイル =====
 # 大容量データファイル
 data/**/*.csv
 
-# 気象データ
-climate/downloads/*.csv
+# バッチダウンロードディレクトリ
+batch/downloads/climate/*.csv
+batch/downloads/gtfs_static/*.txt
+batch/downloads/gtfs_static/*.zip
+batch/downloads/gtfs_realtime/*.pb
 
 # ===== 分析ファイル =====
 files/analysis/
@@ -23,7 +29,6 @@ files/analysis/
 *.pkl
 *.joblib
 *.model
-models/
 
 # ===== ログファイル =====
 logs/

@@ -1,0 +1,35 @@
+[Unit]
+Description=GTFS Static Data Load Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=taita
+Group=taita
+WorkingDirectory=/home/taita/repository/DataScience/class/GTFS
+
+# 環境変数の読み込み
+EnvironmentFile=/home/taita/repository/DataScience/class/GTFS/.env
+
+# ジョブ実行
+ExecStart=/usr/bin/python3 batch/run.py load-static
+
+# リソース制限
+MemoryMax=4G
+CPUQuota=200%
+
+# ログ設定（アプリケーションログは batch/logs/ に出力される）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gtfs-static-load
+
+# タイムアウト設定（30分）
+TimeoutStartSec=1800
+
+# 失敗時の再起動設定
+Restart=on-failure
+RestartSec=300
+
+[Install]
+WantedBy=multi-user.target
