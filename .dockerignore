@@ -1,0 +1,85 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+*.egg
+.pytest_cache
+.coverage
+htmlcov
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Development files
+.devcontainer
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+batch/logs/*
+
+# Downloads and temporary files
+batch/downloads/*
+*.tmp
+*.temp
+
+# Documentation
+README.md
+docs/
+*.md
+!requirements*.txt
+
+# Docker
+docker-compose.*.yml
+Dockerfile*
+.dockerignore
+
+# Testing
+tests/
+test_*.py
+*_test.py
+
+# Model files (large, should be mounted or downloaded)
+files/model/*.h5
+files/model/*.keras
+files/model/*.pkl
+
+# Database dumps
+*.sql
+*.db
+*.sqlite
+*.dump
+
+# Backup files
+*.bak
+*.backup

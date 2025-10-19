@@ -1,0 +1,59 @@
+# Dockerfile for GTFS PostgreSQL Database with PostGIS
+# Production-ready with optional dump restore
+
+FROM postgis/postgis:17-3.5-alpine
+
+# Install required tools
+RUN apk add --no-cache postgresql-client
+
+# Set environment variables with defaults (overridable via docker-compose)
+ENV POSTGRES_PASSWORD=postgres \
+    POSTGRES_USER=postgres \
+    POSTGRES_DB=postgres \
+    PGDATA=/var/lib/postgresql/data
+
+# Create initialization directory
+RUN mkdir -p /docker-entrypoint-initdb.d
+
+# Create initialization script to enable PostGIS extensions
+RUN cat > /docker-entrypoint-initdb.d/00-enable-postgis.sh <<'EOF'
+#!/bin/sh
+set -e
+echo "===== Enabling PostGIS extension ====="
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+  CREATE EXTENSION IF NOT EXISTS postgis;
+  CREATE EXTENSION IF NOT EXISTS postgis_topology;
+  SELECT PostGIS_version();
+EOSQL
+echo "===== PostGIS extension enabled ====="
+EOF
+
+RUN chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh
+
+# Create script for optional dump restoration (only if dump file is mounted)
+RUN cat > /docker-entrypoint-initdb.d/99-restore-dump.sh <<'EOF'
+#!/bin/sh
+set -e
+echo "===== Checking for database dump file ====="
+if [ -f /docker-entrypoint-initdb.d/backup.dump ]; then
+  echo "Found dump file, restoring database..."
+  pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl \
+    /docker-entrypoint-initdb.d/backup.dump 2>&1 || echo "Restore completed with warnings"
+  echo "===== Database restore completed ====="
+else
+  echo "No dump file found at /docker-entrypoint-initdb.d/backup.dump"
+  echo "Skipping restore. Database will start fresh or use existing data volume."
+fi
+EOF
+
+RUN chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+  CMD pg_isready -U $POSTGRES_USER -d $POSTGRES_DB || exit 1
+
+# Expose PostgreSQL port
+EXPOSE 5432
+
+# Data volume
+VOLUME ["/var/lib/postgresql/data"]

@@ -1,0 +1,179 @@
+# Multi-stage Dockerfile for GTFS Batch Processing Jobs
+# Production-ready with cron scheduling and optimized image size
+
+# Stage 1: Builder - Install dependencies
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements-batch.txt .
+RUN pip install --no-cache-dir --user -r requirements-batch.txt
+
+# Install web scraping dependencies
+RUN pip install --no-cache-dir --user playwright requests beautifulsoup4
+
+# Stage 2: Playwright installation
+FROM python:3.11-slim as playwright-installer
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+
+# Install Playwright browsers and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH=/root/.local/bin:$PATH
+RUN playwright install chromium && \
+    playwright install-deps chromium
+
+# Stage 3: Runtime - Production image
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    cron \
+    curl \
+    # Playwright runtime dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libatspi2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (but cron needs specific setup)
+RUN groupadd -r batchuser && useradd -r -g batchuser batchuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/batchuser/.local
+
+# Copy Playwright installation
+COPY --from=playwright-installer /root/.cache /home/batchuser/.cache
+COPY --from=playwright-installer /usr/lib /usr/lib
+COPY --from=playwright-installer /usr/local/lib /usr/local/lib
+
+# Copy application source code
+COPY --chown=batchuser:batchuser batch ./batch
+COPY --chown=batchuser:batchuser files ./files
+
+# Create necessary directories with proper permissions
+RUN mkdir -p \
+    /app/batch/logs \
+    /app/batch/downloads/climate \
+    /app/batch/downloads/gtfs_static \
+    /app/batch/downloads/gtfs_realtime \
+    /app/files/model && \
+    chown -R batchuser:batchuser /app
+
+# Set environment variables
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    TZ=America/Vancouver \
+    PATH=/home/batchuser/.local/bin:$PATH \
+    PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright
+
+# Create cron job file for batch jobs
+RUN echo "# GTFS Batch Processing Cron Jobs" > /etc/cron.d/gtfs-batch && \
+    echo "" >> /etc/cron.d/gtfs-batch && \
+    echo "# Weather Scraper (every hour at minute 0)" >> /etc/cron.d/gtfs-batch && \
+    echo "0 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "" >> /etc/cron.d/gtfs-batch && \
+    echo "# GTFS Realtime Fetch (every hour at minute 0 and 30)" >> /etc/cron.d/gtfs-batch && \
+    echo "0,30 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "" >> /etc/cron.d/gtfs-batch && \
+    echo "# Regional Delay Prediction (every hour at minute 10 and 40)" >> /etc/cron.d/gtfs-batch && \
+    echo "10,40 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "" >> /etc/cron.d/gtfs-batch && \
+    chmod 0644 /etc/cron.d/gtfs-batch && \
+    crontab /etc/cron.d/gtfs-batch
+
+# Create entrypoint script
+COPY <<'EOF' /app/entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "========================================"
+echo "Starting GTFS Batch Processing Container"
+echo "========================================"
+echo ""
+
+# Validate required environment variables
+if [ -z "$DATABASE_URL" ]; then
+  echo "ERROR: DATABASE_URL is not set"
+  exit 1
+fi
+
+if [ -z "$TRANSLINK_API_KEY" ]; then
+  echo "WARNING: TRANSLINK_API_KEY is not set. Some jobs may fail."
+fi
+
+# Test database connection
+echo "Testing database connection..."
+python -c "
+from batch.config.settings import config
+from sqlalchemy import create_engine
+try:
+    engine = create_engine(config.database.database_url)
+    conn = engine.connect()
+    conn.close()
+    print('Database connection: OK')
+except Exception as e:
+    print(f'Database connection failed: {e}')
+    exit(1)
+"
+
+# Start cron in foreground
+echo ""
+echo "Starting cron daemon..."
+echo "Cron jobs configured:"
+cat /etc/cron.d/gtfs-batch
+echo ""
+echo "Logs will be written to /app/batch/logs/"
+echo ""
+
+# Run initial job if specified
+if [ ! -z "$INITIAL_JOB" ]; then
+  echo "Running initial job: $INITIAL_JOB"
+  cd /app && python batch/run.py $INITIAL_JOB
+fi
+
+echo "Container is ready. Cron jobs are running."
+
+# Start cron and tail logs
+cron && tail -f /app/batch/logs/cron_*.log /dev/null
+EOF
+
+RUN chmod +x /app/entrypoint.sh
+
+# Health check - verify cron is running
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD pgrep -x cron > /dev/null || exit 1
+
+# Expose no ports (batch container doesn't need network access from outside)
+
+# Run entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]

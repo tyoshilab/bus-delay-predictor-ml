@@ -19,3 +19,5 @@ ipykernel==6.29.3
 # Additional dependencies from existing codebase
 python-dotenv==1.0.1
 rich==13.7.1
+
+protobuf==4.25.8
