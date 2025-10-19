@@ -13,6 +13,7 @@ doc/
 # ===== データファイル =====
 # 大容量データファイル
 data/**/*.csv
+*.dump
 
 # バッチダウンロードディレクトリ
 batch/downloads/climate/*.csv

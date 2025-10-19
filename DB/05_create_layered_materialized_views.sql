@@ -169,61 +169,26 @@ DROP MATERIALIZED VIEW IF EXISTS gtfs_realtime.gtfs_rt_analytics_mv CASCADE;
 
 CREATE MATERIALIZED VIEW gtfs_realtime.gtfs_rt_analytics_mv AS
 WITH 
--- route_hour_stats AS (
---     SELECT
---         route_id,
---         direction_id,
---         hour_of_day,
---         AVG(arrival_delay) as delay_mean_by_route_hour,
---         COUNT(*) as sample_count
---     FROM gtfs_realtime.gtfs_rt_enriched_mv
---     GROUP BY route_id, direction_id, hour_of_day
---     HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
--- ),
--- stop_hour_stats AS (
---     SELECT
---         stop_id,
---         stop_sequence,
---         hour_of_day,
---         AVG(arrival_delay) as delay_mean_by_stop_hour,
---         COUNT(*) as sample_count
---     FROM gtfs_realtime.gtfs_rt_enriched_mv
---     GROUP BY stop_id, stop_sequence, hour_of_day
---     HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
--- ),
-gtfs_status AS (
-    select 
+route_hour_stats AS (
+    SELECT
         route_id,
-        direction_id, 
-        stop_id,
-        stop_sequence,
-        datetime_60,
-        day_of_week,
-        AVG(arrival_delay) as delay_mean_by_stop_datetime
-    FROM gtfs_realtime.gtfs_rt_enriched_mv gtfs
-    GROUP BY route_id, direction_id, stop_id, stop_sequence, datetime_60, day_of_week
+        direction_id,
+        hour_of_day,
+        AVG(arrival_delay) as delay_mean_by_route_hour,
+        COUNT(*) as sample_count
+    FROM gtfs_realtime.gtfs_rt_enriched_mv
+    GROUP BY route_id, direction_id, hour_of_day
+    HAVING COUNT(*) >= 5  -- Minimum sample size for statistical validity
 )
 SELECT
     f.*,
     -- Statistical features (previously computed in Python)
-    gs.delay_mean_by_stop_datetime
-    -- rhs.delay_mean_by_route_hour,
-    -- shs.delay_mean_by_stop_hour
+    rhs.delay_mean_by_route_hour,
 FROM gtfs_realtime.gtfs_rt_enriched_mv f
-INNER JOIN gtfs_status gs
-    ON f.route_id = gs.route_id
-    AND f.direction_id = gs.direction_id
-    AND f.stop_id = gs.stop_id
-    AND f.stop_sequence = gs.stop_sequence
-    AND f.datetime_60 = gs.datetime_60
--- LEFT JOIN route_hour_stats rhs
---     ON f.route_id = rhs.route_id
---     AND f.direction_id = rhs.direction_id
---     AND f.hour_of_day = rhs.hour_of_day
--- LEFT JOIN stop_hour_stats shs
---     ON f.stop_id = shs.stop_id
---     AND f.stop_sequence = shs.stop_sequence
---     AND f.hour_of_day = shs.hour_of_day;
+LEFT JOIN route_hour_stats rhs
+    ON f.route_id = rhs.route_id
+    AND f.direction_id = rhs.direction_id
+    AND f.hour_of_day = rhs.hour_of_day
 
 -- Performance indexes
 CREATE INDEX idx_gtfs_rt_analytics_mv_route_date

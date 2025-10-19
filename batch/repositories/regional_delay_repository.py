@@ -37,6 +37,9 @@ class RegionalDelayRepository:
             SELECT
                 gtfs_status.route_id,
                 gtfs_status.stop_id,
+                gtfs_status.stop_name,
+                gtfs_status.stop_lat,
+                gtfs_status.stop_lon,
                 gtfs_status.datetime_60 as time_bucket,
                 gtfs_status.direction_id,
                 gtfs_status.hour_sin,
