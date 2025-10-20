@@ -209,8 +209,12 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         else:
             y_pred_2d = y_pred[:, :self.output_timesteps]
 
-        # 予測基準時刻
+        # 予測基準時刻（現在時刻）
         prediction_created_at = datetime.now()
+
+        # 次の0分時点を計算（例: 14:23 -> 15:00）
+        current_time = datetime.now()
+        next_hour = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
         results = []
         for idx, rd_key in enumerate(metadata):
@@ -224,12 +228,13 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             if not stop_info:
                 continue
 
-            # 各時間オフセットの予測
+            # 各時間オフセットの予測（次の0分時点から開始）
             for hour_offset in range(1, self.output_timesteps + 1):
                 delay_seconds = float(y_pred_2d[idx, hour_offset - 1])
                 delay_minutes = delay_seconds / 60.0
 
-                prediction_target_time = prediction_created_at + timedelta(hours=hour_offset)
+                # 0分時点での予測時刻（例: 15:00, 16:00, 17:00...）
+                prediction_target_time = next_hour + timedelta(hours=hour_offset - 1)
 
                 results.append({
                     'region_id': region_id,
