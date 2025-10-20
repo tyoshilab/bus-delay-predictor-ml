@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     cron \
     curl \
+    procps \
     # Playwright runtime dependencies
     libnss3 \
     libnspr4 \
