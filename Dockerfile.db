@@ -9,7 +9,7 @@ FROM alpine:latest as downloader
 RUN apk add --no-cache curl
 
 # Set build arguments for GitHub resource URL
-ARG GITHUB_REPO_URL="https://github.com/taitalabs/vancoucer-bus-science/releases/download"
+ARG GITHUB_REPO_URL="https://github.com/tyoshilab/bus-delay-predictor-ml/releases/download"
 ARG DUMP_VERSION="v1.0.0"
 ARG DUMP_FILENAME="gtfs_db.dump"
 
