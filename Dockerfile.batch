@@ -134,6 +134,49 @@ except Exception as e:
 # Re-enable exit on error for the rest of the script
 set -e
 
+# Download ML model from GitHub Releases if not exists
+echo "Checking ML model files..."
+MODEL_DIR="/app/files/model"
+MODEL_FILE="${MODEL_DIR}/best_delay_model.h5"
+
+if [ ! -f "$MODEL_FILE" ]; then
+  echo "Model file not found. Downloading from GitHub Releases..."
+
+  # Set default model URL if not provided
+  MODEL_URL="${MODEL_URL:-https://github.com/tyoshilab/bus-delay-predictor-ml/releases/download/model-v1.0/best_delay_model.h5}"
+
+  # Create model directory if it doesn't exist
+  mkdir -p "$MODEL_DIR"
+
+  # Prepare curl command with authentication if GITHUB_TOKEN is set
+  CURL_CMD="curl -L -f"
+  if [ ! -z "$GITHUB_TOKEN" ]; then
+    echo "Using GitHub token for authentication (private repository)"
+    CURL_CMD="curl -L -f -H \"Authorization: token $GITHUB_TOKEN\""
+  else
+    echo "No GITHUB_TOKEN set. Attempting public download..."
+  fi
+
+  # Download model file
+  if eval "$CURL_CMD -o \"$MODEL_FILE\" \"$MODEL_URL\""; then
+    chown batchuser:batchuser "$MODEL_FILE"
+    echo "✓ Model downloaded successfully: $MODEL_FILE"
+    ls -lh "$MODEL_FILE"
+  else
+    echo "✗ Failed to download model from: $MODEL_URL"
+    if [ -z "$GITHUB_TOKEN" ]; then
+      echo "ERROR: Repository is private. Please set GITHUB_TOKEN environment variable."
+      echo "Create a token at: https://github.com/settings/tokens"
+      echo "Required scope: repo (for private repositories)"
+    fi
+    echo "WARNING: Prediction jobs may fail without the model file."
+    echo "Please set MODEL_URL and GITHUB_TOKEN environment variables."
+  fi
+else
+  echo "✓ Model file already exists: $MODEL_FILE"
+  ls -lh "$MODEL_FILE"
+fi
+
 # Create cron job file with runtime environment variables
 echo "Creating cron configuration..."
 
