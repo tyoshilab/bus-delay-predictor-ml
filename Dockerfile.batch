@@ -142,35 +142,60 @@ MODEL_FILE="${MODEL_DIR}/best_delay_model.h5"
 if [ ! -f "$MODEL_FILE" ]; then
   echo "Model file not found. Downloading from GitHub Releases..."
 
-  # Set default model URL if not provided
-  MODEL_URL="${MODEL_URL:-https://github.com/tyoshilab/bus-delay-predictor-ml/releases/download/model-v1.0/best_delay_model.h5}"
-
   # Create model directory if it doesn't exist
   mkdir -p "$MODEL_DIR"
 
-  # Prepare curl command with authentication if GITHUB_TOKEN is set
-  CURL_CMD="curl -L -f"
-  if [ ! -z "$GITHUB_TOKEN" ]; then
+  # Check if GITHUB_TOKEN is set (required for private repositories)
+  if [ -z "$GITHUB_TOKEN" ]; then
+    echo "ERROR: GITHUB_TOKEN is not set."
+    echo "For private repositories, you must set GITHUB_TOKEN environment variable."
+    echo "Create a token at: https://github.com/settings/tokens"
+    echo "Required scope: repo (for private repositories)"
+    echo "WARNING: Skipping model download. Prediction jobs may fail."
+  else
     echo "Using GitHub token for authentication (private repository)"
-    CURL_CMD="curl -L -f -H \"Authorization: token $GITHUB_TOKEN\""
-  else
-    echo "No GITHUB_TOKEN set. Attempting public download..."
-  fi
 
-  # Download model file
-  if eval "$CURL_CMD -o \"$MODEL_FILE\" \"$MODEL_URL\""; then
-    chown batchuser:batchuser "$MODEL_FILE"
-    echo "✓ Model downloaded successfully: $MODEL_FILE"
-    ls -lh "$MODEL_FILE"
-  else
-    echo "✗ Failed to download model from: $MODEL_URL"
-    if [ -z "$GITHUB_TOKEN" ]; then
-      echo "ERROR: Repository is private. Please set GITHUB_TOKEN environment variable."
-      echo "Create a token at: https://github.com/settings/tokens"
-      echo "Required scope: repo (for private repositories)"
+    # For private repositories, use GitHub API to get the asset download URL
+    # Set default values if not provided
+    GITHUB_REPO="${GITHUB_REPO:-tyoshilab/bus-delay-predictor-ml}"
+    RELEASE_TAG="${RELEASE_TAG:-model-v1.0}"
+    ASSET_NAME="${ASSET_NAME:-best_delay_model.h5}"
+
+    echo "Repository: $GITHUB_REPO"
+    echo "Release: $RELEASE_TAG"
+    echo "Asset: $ASSET_NAME"
+
+    # Get release information
+    RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
+    echo "Fetching release info from API..."
+
+    # Download release info and extract asset ID
+    ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+      -H "Accept: application/vnd.github.v3+json" \
+      "$RELEASE_API_URL" | grep -A 3 "\"name\": \"$ASSET_NAME\"" | grep -oP '"id": \K[0-9]+' | head -1)
+
+    if [ -z "$ASSET_ID" ]; then
+      echo "✗ Failed to find asset '$ASSET_NAME' in release '$RELEASE_TAG'"
+      echo "Please check that the release and asset exist."
+    else
+      echo "Asset ID: $ASSET_ID"
+      ASSET_URL="https://api.github.com/repos/$GITHUB_REPO/releases/assets/$ASSET_ID"
+
+      # Download model file using API with Accept header for binary content
+      echo "Downloading model from GitHub API..."
+      if curl -L -f \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/octet-stream" \
+        -o "$MODEL_FILE" \
+        "$ASSET_URL"; then
+        chown batchuser:batchuser "$MODEL_FILE"
+        echo "✓ Model downloaded successfully: $MODEL_FILE"
+        ls -lh "$MODEL_FILE"
+      else
+        echo "✗ Failed to download model from: $ASSET_URL"
+        echo "WARNING: Prediction jobs may fail without the model file."
+      fi
     fi
-    echo "WARNING: Prediction jobs may fail without the model file."
-    echo "Please set MODEL_URL and GITHUB_TOKEN environment variables."
   fi
 else
   echo "✓ Model file already exists: $MODEL_FILE"
