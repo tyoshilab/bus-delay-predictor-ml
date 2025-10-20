@@ -16,6 +16,11 @@ sqlalchemy==2.0.28
 # Jupyter
 ipykernel==6.29.3
 
+# HTTP and web scraping
+requests==2.31.0
+beautifulsoup4==4.12.3
+playwright==1.42.0
+
 # Additional dependencies from existing codebase
 python-dotenv==1.0.1
 rich==13.7.1
