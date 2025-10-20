@@ -79,27 +79,8 @@ ENV PYTHONPATH=/app:/home/batchuser/.local/lib/python3.11/site-packages \
     PATH=/home/batchuser/.local/bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright
 
-# Create cron job file for batch jobs
-# NOTE: Using /etc/cron.d/ instead of crontab for easier management
-RUN echo "# GTFS Batch Processing Cron Jobs" > /etc/cron.d/gtfs-batch && \
-    echo "" >> /etc/cron.d/gtfs-batch && \
-    echo "# Set environment variables for cron" >> /etc/cron.d/gtfs-batch && \
-    echo "SHELL=/bin/bash" >> /etc/cron.d/gtfs-batch && \
-    echo "PATH=/home/batchuser/.local/bin:/usr/local/bin:/usr/bin:/bin" >> /etc/cron.d/gtfs-batch && \
-    echo "PYTHONPATH=/app:/home/batchuser/.local/lib/python3.11/site-packages" >> /etc/cron.d/gtfs-batch && \
-    echo "PYTHONUNBUFFERED=1" >> /etc/cron.d/gtfs-batch && \
-    echo "PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright" >> /etc/cron.d/gtfs-batch && \
-    echo "" >> /etc/cron.d/gtfs-batch && \
-    echo "# Weather Scraper (every hour at minute 0)" >> /etc/cron.d/gtfs-batch && \
-    echo "0 * * * * batchuser cd /app && python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1" >> /etc/cron.d/gtfs-batch && \
-    echo "" >> /etc/cron.d/gtfs-batch && \
-    echo "# GTFS Realtime Fetch (every hour at minute 0 and 30)" >> /etc/cron.d/gtfs-batch && \
-    echo "0,30 * * * * batchuser cd /app && python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1" >> /etc/cron.d/gtfs-batch && \
-    echo "" >> /etc/cron.d/gtfs-batch && \
-    echo "# Regional Delay Prediction (every hour at minute 10 and 40)" >> /etc/cron.d/gtfs-batch && \
-    echo "10,40 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1" >> /etc/cron.d/gtfs-batch && \
-    echo "" >> /etc/cron.d/gtfs-batch && \
-    chmod 0644 /etc/cron.d/gtfs-batch
+# NOTE: Cron job file will be created at runtime in entrypoint.sh
+# This is necessary because Railway environment variables are only available at runtime
 
 # Create entrypoint script
 COPY <<'EOF' /app/entrypoint.sh
@@ -153,10 +134,48 @@ except Exception as e:
 # Re-enable exit on error for the rest of the script
 set -e
 
-# Display cron configuration
+# Create cron job file with runtime environment variables
+echo "Creating cron configuration..."
+
+# Use a temporary file to safely build the cron configuration
+cat > /tmp/gtfs-batch << 'CRONEOF'
+# GTFS Batch Processing Cron Jobs
+
+# Set environment variables for cron
+SHELL=/bin/bash
+PATH=/home/batchuser/.local/bin:/usr/local/bin:/usr/bin:/bin
+PYTHONPATH=/app:/home/batchuser/.local/lib/python3.11/site-packages
+PYTHONUNBUFFERED=1
+PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright
+CRONEOF
+
+# Append environment variables (using printf to handle special characters safely)
+printf "DATABASE_URL=%s\n" "$DATABASE_URL" >> /tmp/gtfs-batch
+printf "TRANSLINK_API_KEY=%s\n" "$TRANSLINK_API_KEY" >> /tmp/gtfs-batch
+
+# Append the actual cron jobs
+cat >> /tmp/gtfs-batch << 'CRONEOF'
+
+# Weather Scraper (every hour at minute 0)
+0 * * * * batchuser cd /app && python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1
+
+# GTFS Realtime Fetch (every hour at minute 0 and 30)
+0,30 * * * * batchuser cd /app && python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
+
+# Regional Delay Prediction (every hour at minute 10 and 40)
+10,40 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1
+
+CRONEOF
+
+# Move to final location and set permissions
+mv /tmp/gtfs-batch /etc/cron.d/gtfs-batch
+chmod 0644 /etc/cron.d/gtfs-batch
+echo "✓ Cron configuration created"
+
+# Display cron configuration (without showing sensitive values)
 echo ""
 echo "Cron jobs configured:"
-cat /etc/cron.d/gtfs-batch
+cat /etc/cron.d/gtfs-batch | grep -E "^(#|[0-9])" | grep -v "DATABASE_URL\|TRANSLINK_API_KEY"
 echo ""
 
 # Run initial job if specified
