@@ -29,7 +29,3 @@ restartPolicyMaxRetries = 10
 # Graceful shutdown configuration
 # Give PostgreSQL time for clean shutdown
 drainingSeconds = 30
-
-# Health check using pg_isready
-healthcheckPath = "/"
-healthcheckTimeout = 10
