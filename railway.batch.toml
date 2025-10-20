@@ -12,7 +12,8 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile.batch"
 
 [deploy]
-# Batch service runs cron jobs, so no specific start command needed
-# The Dockerfile's ENTRYPOINT handles the startup
+# IMPORTANT: Railway ignores Dockerfile ENTRYPOINT by default
+# Must explicitly specify the entrypoint script to start cron
+startCommand = "/app/entrypoint.sh"
 restartPolicyType = "always"
 restartPolicyMaxRetries = 10
