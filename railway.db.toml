@@ -1,0 +1,35 @@
+# Railway Deployment Configuration - Database Service
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.db"
+
+# Build arguments for downloading database dump from GitHub
+# These can be overridden via Railway environment variables
+[build.buildArgs]
+GITHUB_REPO_URL = "https://github.com/taitalabs/vancoucer-bus-science/releases/download"
+DUMP_VERSION = "v1.0.0"
+DUMP_FILENAME = "gtfs_db.dump"
+
+# Optional: Watch patterns to trigger deployments only when specific files change
+# Uncomment to enable conditional deployments (saves build time and costs)
+watchPatterns = ["Dockerfile.db", "DB/**"]
+
+# ═══════════════════════════════════════════════════════════
+# Deploy Configuration
+# ═══════════════════════════════════════════════════════════
+[deploy]
+# PostgreSQL uses default postgres entrypoint
+# No need to override startCommand
+
+# Restart policy - ALWAYS restart for database
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
+
+# Graceful shutdown configuration
+# Give PostgreSQL time for clean shutdown
+drainingSeconds = 30
+
+# Health check using pg_isready
+healthcheckPath = "/"
+healthcheckTimeout = 10
