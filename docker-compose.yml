@@ -9,6 +9,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.db
+      args:
+        GITHUB_REPO_URL: ${GITHUB_REPO_URL:-https://github.com/taitalabs/vancoucer-bus-science/releases/download}
+        DUMP_VERSION: ${DUMP_VERSION:-v1.0.0}
+        DUMP_FILENAME: ${DUMP_FILENAME:-gtfs_db.dump}
     container_name: gtfs-postgres-dev
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

@@ -1,6 +1,28 @@
-# Dockerfile for GTFS PostgreSQL Database with PostGIS
-# Production-ready with optional dump restore
+# Multi-stage Dockerfile for GTFS PostgreSQL Database with PostGIS
+# Production-ready with dump restore from GitHub resources
 
+# Stage 1: Download dump file from GitHub
+FROM alpine:latest as downloader
+
+# Install curl for downloading
+RUN apk add --no-cache curl
+
+# Set build arguments for GitHub resource URL
+ARG GITHUB_REPO_URL="https://github.com/taitalabs/vancoucer-bus-science/releases/download"
+ARG DUMP_VERSION="v1.0.0"
+ARG DUMP_FILENAME="gtfs_db.dump"
+
+# Download the database dump from GitHub resources
+WORKDIR /tmp
+RUN echo "Downloading database dump from GitHub resources..." && \
+    curl -L -o backup.dump \
+    "${GITHUB_REPO_URL}/${DUMP_VERSION}/${DUMP_FILENAME}" || \
+    (echo "Failed to download dump file. Will skip restore." && touch backup.dump)
+
+# Verify the download
+RUN ls -lh backup.dump
+
+# Stage 2: PostgreSQL with PostGIS
 FROM postgis/postgis:17-3.6-alpine
 
 # Install required tools
@@ -20,6 +42,9 @@ RUN mkdir -p /var/lib/postgresql/data && \
 # Create initialization directory
 RUN mkdir -p /docker-entrypoint-initdb.d
 
+# Copy the downloaded dump file from downloader stage
+COPY --from=downloader /tmp/backup.dump /docker-entrypoint-initdb.d/backup.dump
+
 # Create initialization script to enable PostGIS extensions
 RUN cat > /docker-entrypoint-initdb.d/00-enable-postgis.sh <<'EOF'
 #!/bin/sh
@@ -35,19 +60,29 @@ EOF
 
 RUN chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh
 
-# Create script for optional dump restoration (only if dump file is mounted)
+# Create script for dump restoration
 RUN cat > /docker-entrypoint-initdb.d/99-restore-dump.sh <<'EOF'
 #!/bin/sh
 set -e
 echo "===== Checking for database dump file ====="
-if [ -f /docker-entrypoint-initdb.d/backup.dump ]; then
+if [ -f /docker-entrypoint-initdb.d/backup.dump ] && [ -s /docker-entrypoint-initdb.d/backup.dump ]; then
   echo "Found dump file, restoring database..."
+  echo "Dump file size: $(du -h /docker-entrypoint-initdb.d/backup.dump | cut -f1)"
+
+  # Restore with error handling
   pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl \
-    /docker-entrypoint-initdb.d/backup.dump 2>&1 || echo "Restore completed with warnings"
+    /docker-entrypoint-initdb.d/backup.dump 2>&1 || {
+    echo "Restore completed with warnings (this is often normal)"
+  }
+
   echo "===== Database restore completed ====="
+
+  # Optional: Remove dump file after restore to save space
+  # rm -f /docker-entrypoint-initdb.d/backup.dump
+  echo "Dump file retained for reference"
 else
-  echo "No dump file found at /docker-entrypoint-initdb.d/backup.dump"
-  echo "Skipping restore. Database will start fresh or use existing data volume."
+  echo "No valid dump file found at /docker-entrypoint-initdb.d/backup.dump"
+  echo "Database will start fresh or use existing data volume."
 fi
 EOF
 
