@@ -338,8 +338,8 @@ def main():
     weather_parser.add_argument(
         '--row-limit',
         type=int,
-        default=40,
-        help='Number of rows to fetch (default: 40)'
+        default=None,
+        help='Number of rows to fetch (default: unlimited, fetches all available data)'
     )
     weather_parser.add_argument(
         '--no-db',
