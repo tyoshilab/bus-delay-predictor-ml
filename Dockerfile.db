@@ -1,5 +1,6 @@
 # Multi-stage Dockerfile for GTFS PostgreSQL Database with PostGIS
 # Production-ready with dump restore from GitHub resources
+# Railway-compatible: Uses Railway volumes instead of Dockerfile VOLUME
 
 # Stage 1: Download dump file from GitHub
 FROM alpine:latest as downloader
@@ -95,8 +96,11 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
 # Expose PostgreSQL port
 EXPOSE 5432
 
-# Data volume
-VOLUME ["/var/lib/postgresql/data"]
+# NOTE: VOLUME keyword is NOT used here (Railway requirement)
+# For Railway: Configure volume via Railway Dashboard
+#   - Mount path: /var/lib/postgresql/data
+#   - Volume size: 10GB+ recommended
+# For docker-compose: Named volumes are defined in docker-compose.yml
 
 # Ensure we run as the postgres user (not root) - critical for Railway
 USER postgres
