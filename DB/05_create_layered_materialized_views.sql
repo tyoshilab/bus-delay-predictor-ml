@@ -183,7 +183,7 @@ route_hour_stats AS (
 SELECT
     f.*,
     -- Statistical features (previously computed in Python)
-    rhs.delay_mean_by_route_hour,
+    rhs.delay_mean_by_route_hour
 FROM gtfs_realtime.gtfs_rt_enriched_mv f
 LEFT JOIN route_hour_stats rhs
     ON f.route_id = rhs.route_id
@@ -193,6 +193,9 @@ LEFT JOIN route_hour_stats rhs
 -- Performance indexes
 CREATE INDEX idx_gtfs_rt_analytics_mv_route_date
 ON gtfs_realtime.gtfs_rt_analytics_mv (route_id, start_date);
+
+CREATE INDEX idx_gtfs_rt_analytics_mv_date
+ON gtfs_realtime.gtfs_rt_analytics_mv (start_date);
 
 CREATE INDEX idx_gtfs_rt_analytics_mv_datetime_60
 ON gtfs_realtime.gtfs_rt_analytics_mv (datetime_60);

@@ -83,10 +83,20 @@ if [ ! -f "$MODEL_FILE" ]; then
     RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
     echo "Fetching release info from API..."
 
-    # Download release info and extract asset ID
+    # Download release info and extract asset ID using Python
     ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
       -H "Accept: application/vnd.github.v3+json" \
-      "$RELEASE_API_URL" | grep -A 3 "\"name\": \"$ASSET_NAME\"" | grep -oP '"id": \K[0-9]+' | head -1)
+      "$RELEASE_API_URL" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for asset in data.get('assets', []):
+        if asset.get('name') == '$ASSET_NAME':
+            print(asset.get('id'))
+            break
+except:
+    pass
+")
 
     if [ -z "$ASSET_ID" ]; then
       echo "✗ Failed to find asset '$ASSET_NAME' in release '$RELEASE_TAG'"
@@ -134,6 +144,7 @@ CRONEOF
 # Append environment variables (using printf to handle special characters safely)
 printf "DATABASE_URL=%s\n" "$DATABASE_URL" >> /tmp/gtfs-batch
 printf "TRANSLINK_API_KEY=%s\n" "$TRANSLINK_API_KEY" >> /tmp/gtfs-batch
+printf "PREDICTION_MODEL_PATH=%s\n" "/app/files/model/best_delay_model.h5" >> /tmp/gtfs-batch
 
 # Append the actual cron jobs
 cat >> /tmp/gtfs-batch << 'CRONEOF'

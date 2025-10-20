@@ -15,6 +15,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       TZ: ${TZ:-America/Vancouver}
+    command: ["postgres", "-c", "ssl=off"]
     ports:
       - "5432:5432"
     volumes:
@@ -72,7 +73,7 @@ services:
       dockerfile: Dockerfile.batch
     container_name: gtfs-batch-dev
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}
+      DATABASE_URL: postgres://u8moltsmp2tq8m:p40b33dc03fb7015aa9bf9b92c34e44004214003d06ada77db21f1ca12d54aa17@c4qfhpigiuidv8.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/ddon0l69vpfbr8
       TRANSLINK_API_KEY: ${TRANSLINK_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       TZ: ${TZ:-America/Vancouver}

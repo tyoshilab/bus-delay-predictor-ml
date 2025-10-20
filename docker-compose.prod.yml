@@ -16,6 +16,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-gtfs_production}
       TZ: ${TZ:-America/Vancouver}
+    command: ["postgres", "-c", "ssl=off"]
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:

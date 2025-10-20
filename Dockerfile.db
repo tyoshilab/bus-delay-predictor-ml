@@ -1,7 +1,7 @@
 # Dockerfile for GTFS PostgreSQL Database with PostGIS
 # Production-ready with optional dump restore
 
-FROM postgis/postgis:17-3.5-alpine
+FROM postgis/postgis:17-3.6-alpine
 
 # Install required tools
 RUN apk add --no-cache postgresql-client
@@ -11,6 +11,11 @@ ENV POSTGRES_PASSWORD=postgres \
     POSTGRES_USER=postgres \
     POSTGRES_DB=postgres \
     PGDATA=/var/lib/postgresql/data
+
+# Ensure postgres user ownership and proper permissions for Railway volumes
+RUN mkdir -p /var/lib/postgresql/data && \
+    chown -R postgres:postgres /var/lib/postgresql && \
+    chmod -R 700 /var/lib/postgresql/data
 
 # Create initialization directory
 RUN mkdir -p /docker-entrypoint-initdb.d
@@ -57,3 +62,6 @@ EXPOSE 5432
 
 # Data volume
 VOLUME ["/var/lib/postgresql/data"]
+
+# Ensure we run as the postgres user (not root) - critical for Railway
+USER postgres
