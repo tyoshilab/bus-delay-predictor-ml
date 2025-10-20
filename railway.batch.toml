@@ -1,0 +1,18 @@
+# Railway Deployment Configuration - Batch Service
+# This configuration is specifically for the batch processing service
+#
+# To use this configuration in Railway Dashboard:
+# 1. Go to Service Settings → Build
+# 2. Set "Config File Path" to: railway.batch.toml
+# OR
+# 3. Manually configure the Dockerfile path to: Dockerfile.batch
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.batch"
+
+[deploy]
+# Batch service runs cron jobs, so no specific start command needed
+# The Dockerfile's ENTRYPOINT handles the startup
+restartPolicyType = "always"
+restartPolicyMaxRetries = 10

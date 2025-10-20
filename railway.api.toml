@@ -1,0 +1,17 @@
+# Railway Deployment Configuration - API Service (Explicit)
+# This configuration is specifically for the FastAPI service
+#
+# To use this configuration in Railway Dashboard:
+# 1. Go to Service Settings → Build
+# 2. Set "Config File Path" to: railway.api.toml
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.api"
+
+[deploy]
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
