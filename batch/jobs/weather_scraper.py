@@ -314,9 +314,6 @@ class WeatherScraperJob(ScraperJob):
 
             # ファイルサイズチェック
             file_size = file_path.stat().st_size
-            if file_size < 1000:  # 1KB未満はエラーファイルとみなす
-                self.logger.error(f"File size too small: {file_size} bytes")
-                return False
 
             # CSV形式の基本チェック
             df = pd.read_csv(file_path, nrows=5)
