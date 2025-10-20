@@ -79,29 +79,38 @@ ENV PYTHONPATH=/app:/home/batchuser/.local/lib/python3.11/site-packages \
     PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright
 
 # Create cron job file for batch jobs
+# NOTE: Using /etc/cron.d/ instead of crontab for easier management
 RUN echo "# GTFS Batch Processing Cron Jobs" > /etc/cron.d/gtfs-batch && \
     echo "" >> /etc/cron.d/gtfs-batch && \
+    echo "# Set environment variables for cron" >> /etc/cron.d/gtfs-batch && \
+    echo "SHELL=/bin/bash" >> /etc/cron.d/gtfs-batch && \
+    echo "PATH=/home/batchuser/.local/bin:/usr/local/bin:/usr/bin:/bin" >> /etc/cron.d/gtfs-batch && \
+    echo "PYTHONPATH=/app:/home/batchuser/.local/lib/python3.11/site-packages" >> /etc/cron.d/gtfs-batch && \
+    echo "PYTHONUNBUFFERED=1" >> /etc/cron.d/gtfs-batch && \
+    echo "PLAYWRIGHT_BROWSERS_PATH=/home/batchuser/.cache/ms-playwright" >> /etc/cron.d/gtfs-batch && \
+    echo "" >> /etc/cron.d/gtfs-batch && \
     echo "# Weather Scraper (every hour at minute 0)" >> /etc/cron.d/gtfs-batch && \
-    echo "0 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "0 * * * * batchuser cd /app && python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1" >> /etc/cron.d/gtfs-batch && \
     echo "" >> /etc/cron.d/gtfs-batch && \
     echo "# GTFS Realtime Fetch (every hour at minute 0 and 30)" >> /etc/cron.d/gtfs-batch && \
-    echo "0,30 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "0,30 * * * * batchuser cd /app && python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1" >> /etc/cron.d/gtfs-batch && \
     echo "" >> /etc/cron.d/gtfs-batch && \
     echo "# Regional Delay Prediction (every hour at minute 10 and 40)" >> /etc/cron.d/gtfs-batch && \
-    echo "10,40 * * * * batchuser cd /app && /home/batchuser/.local/bin/python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1" >> /etc/cron.d/gtfs-batch && \
+    echo "10,40 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1" >> /etc/cron.d/gtfs-batch && \
     echo "" >> /etc/cron.d/gtfs-batch && \
-    chmod 0644 /etc/cron.d/gtfs-batch && \
-    crontab /etc/cron.d/gtfs-batch
+    chmod 0644 /etc/cron.d/gtfs-batch
 
 # Create entrypoint script
 COPY <<'EOF' /app/entrypoint.sh
 #!/bin/bash
-set -e
 
 echo "========================================"
 echo "Starting GTFS Batch Processing Container"
 echo "========================================"
 echo ""
+
+# Don't exit on error during initial checks (allow Python warnings)
+set +e
 
 # Validate required environment variables
 if [ -z "$DATABASE_URL" ]; then
@@ -113,28 +122,40 @@ if [ -z "$TRANSLINK_API_KEY" ]; then
   echo "WARNING: TRANSLINK_API_KEY is not set. Some jobs may fail."
 fi
 
-# Test database connection
+# Create log directory and files with proper permissions
+echo "Setting up log files..."
+mkdir -p /app/batch/logs
+touch /app/batch/logs/cron_weather.log
+touch /app/batch/logs/cron_fetch.log
+touch /app/batch/logs/cron_predict.log
+chown -R batchuser:batchuser /app/batch/logs
+chmod 666 /app/batch/logs/cron_*.log
+echo "✓ Log files ready"
+
+# Test database connection (suppress matplotlib warnings)
 echo "Testing database connection..."
 python -c "
+import warnings
+warnings.filterwarnings('ignore')
 from batch.config.settings import config
 from sqlalchemy import create_engine
 try:
     engine = create_engine(config.database.database_url)
     conn = engine.connect()
     conn.close()
-    print('Database connection: OK')
+    print('✓ Database connection: OK')
 except Exception as e:
-    print(f'Database connection failed: {e}')
+    print(f'✗ Database connection failed: {e}')
     exit(1)
-"
+" 2>&1 | grep -E "^(✓|✗)"
 
-# Start cron in foreground
+# Re-enable exit on error for the rest of the script
+set -e
+
+# Display cron configuration
 echo ""
-echo "Starting cron daemon..."
 echo "Cron jobs configured:"
 cat /etc/cron.d/gtfs-batch
-echo ""
-echo "Logs will be written to /app/batch/logs/"
 echo ""
 
 # Run initial job if specified
@@ -143,15 +164,40 @@ if [ ! -z "$INITIAL_JOB" ]; then
   cd /app && python batch/run.py $INITIAL_JOB
 fi
 
+# Start cron daemon
+echo "Starting cron daemon..."
+cron
+
+# Wait for cron to fully start
+sleep 2
+
+# Verify cron is running
+if pgrep -x cron > /dev/null; then
+  CRON_PID=$(pgrep -x cron)
+  echo "✓ Cron daemon is running (PID: $CRON_PID)"
+else
+  echo "✗ ERROR: Cron daemon failed to start"
+  exit 1
+fi
+
+echo ""
+echo "=========================================="
 echo "Container is ready. Cron jobs are running."
+echo "=========================================="
+echo "Logs will be written to /app/batch/logs/"
+echo ""
+echo "Current time: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+echo ""
+echo "Next cron execution times:"
+echo "  Weather Scraper:  Every hour at :00"
+echo "  GTFS Fetch:       Every hour at :00 and :30"
+echo "  Prediction:       Every hour at :10 and :40"
+echo ""
+echo "Waiting for cron jobs to execute..."
+echo "=========================================="
 
-# Create placeholder log files if they don't exist
-touch /app/batch/logs/cron_weather.log
-touch /app/batch/logs/cron_fetch.log
-touch /app/batch/logs/cron_predict.log
-
-# Start cron and tail logs
-cron && tail -f /app/batch/logs/cron_*.log
+# Use exec to replace shell with tail (for proper signal handling)
+exec tail -f /app/batch/logs/cron_*.log /dev/null
 EOF
 
 RUN chmod +x /app/entrypoint.sh

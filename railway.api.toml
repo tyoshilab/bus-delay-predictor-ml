@@ -6,12 +6,34 @@
 # 2. Set "Config File Path" to: railway.api.toml
 
 [build]
-builder = "dockerfile"
+builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.api"
 
+# Optional: Watch patterns to trigger deployments only when specific files change
+# Uncomment to enable conditional deployments (saves build time and costs)
+watchPatterns = ["api/**", "requirements-fastapi.txt", "Dockerfile.api"]
+
+# ═══════════════════════════════════════════════════════════
+# Deploy Configuration
+# ═══════════════════════════════════════════════════════════
 [deploy]
-startCommand = "uvicorn api.main:app --host 0.0.0.0 --port 8000"
+# IMPORTANT: Use $PORT environment variable (Railway assigns this dynamically)
+# DO NOT hardcode port 8000 - Railway will assign a different port
+# Use sh -c to ensure environment variable expansion
+startCommand = "sh -c 'uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
+
+# Healthcheck configuration
 healthcheckPath = "/health"
 healthcheckTimeout = 100
-restartPolicyType = "on_failure"
+
+# Restart policy
+restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+
+# Graceful shutdown configuration
+# Time between SIGTERM and SIGKILL (default: 30s)
+drainingSeconds = 30
+
+# Deployment overlap for zero-downtime deployments
+# Previous deployment stays alive for this duration during new deployment
+overlapSeconds = 0

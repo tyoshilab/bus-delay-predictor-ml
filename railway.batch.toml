@@ -8,12 +8,32 @@
 # 3. Manually configure the Dockerfile path to: Dockerfile.batch
 
 [build]
-builder = "dockerfile"
+builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.batch"
 
+# Optional: Watch patterns to trigger deployments only when specific files change
+# Uncomment to enable conditional deployments (saves build time and costs)
+watchPatterns = ["batch/**", "requirements-batch.txt", "Dockerfile.batch"]
+
+# ═══════════════════════════════════════════════════════════
+# Deploy Configuration
+# ═══════════════════════════════════════════════════════════
 [deploy]
 # IMPORTANT: Railway ignores Dockerfile ENTRYPOINT by default
 # Must explicitly specify the entrypoint script to start cron
 startCommand = "/app/entrypoint.sh"
-restartPolicyType = "always"
+
+# Restart policy - ALWAYS restart for cron jobs
+restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 10
+
+# Graceful shutdown configuration
+# Give cron jobs time to finish before SIGKILL
+drainingSeconds = 60
+
+# NOTE: Batch service doesn't need healthcheck (no HTTP endpoint)
+# Healthcheck is handled by cron process monitoring in entrypoint.sh
+
+# NOTE: Railway now supports native cron scheduling via cronSchedule
+# However, we use internal cron daemon for more complex job scheduling
+# and better control over job execution and logging
