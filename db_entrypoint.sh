@@ -6,9 +6,13 @@ echo "PostgreSQL Container with Dump Restore"
 echo "=========================================="
 echo ""
 
-# Download database dump from GitHub Releases if needed
+# Ensure proper ownership of initialization directory
+# This script runs as root, but PostgreSQL will run as postgres user
 DUMP_DIR="/docker-entrypoint-initdb.d"
 DUMP_FILE="${DUMP_DIR}/backup.dump"
+
+# Ensure postgres user can read the init directory
+chown -R postgres:postgres "$DUMP_DIR"
 
 echo "Checking database dump file..."
 
@@ -18,6 +22,9 @@ if [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then
   if [ "$SIZE" -gt 100000 ]; then
     echo "✓ Valid dump file already exists: $DUMP_FILE"
     ls -lh "$DUMP_FILE"
+    # Ensure proper ownership
+    chown postgres:postgres "$DUMP_FILE"
+    chmod 644 "$DUMP_FILE"
   else
     echo "⚠ Existing dump file is too small ($SIZE bytes), will re-download"
     rm -f "$DUMP_FILE"
@@ -85,10 +92,10 @@ except:
         -H "Accept: application/octet-stream" \
         -o "$DUMP_FILE" \
         "$ASSET_URL"; then
-        
+
         echo "✓ Dump downloaded successfully: $DUMP_FILE"
         ls -lh "$DUMP_FILE"
-        
+
         # Verify downloaded file size
         SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
         if [ "$SIZE" -lt 100000 ]; then
@@ -99,6 +106,9 @@ except:
           touch "$DUMP_FILE"
         else
           echo "✓ File size validation passed: $SIZE bytes"
+          # Set proper ownership for postgres user
+          chown postgres:postgres "$DUMP_FILE"
+          chmod 644 "$DUMP_FILE"
         fi
       else
         echo "✗ Failed to download dump from: $ASSET_URL"
@@ -115,5 +125,7 @@ echo "Starting PostgreSQL..."
 echo "=========================================="
 echo ""
 
-# Execute the original PostgreSQL entrypoint
+# IMPORTANT: Execute the original PostgreSQL docker-entrypoint.sh
+# This must be run as postgres user, not root
+# The postgis/postgis image handles the user switching internally
 exec docker-entrypoint.sh "$@"
