@@ -11,90 +11,13 @@ RUN apk add --no-cache \
     curl \
     bash
 
-# Set environment variables with defaults (overridable via docker-compose)
+# CRITICAL: Set PGDATA to subdirectory (Railway requirement)
+# Railway mounts volume at /var/lib/postgresql/data as root
+# PostgreSQL needs to write to a subdirectory owned by postgres
 ENV POSTGRES_PASSWORD=postgres \
     POSTGRES_USER=postgres \
     POSTGRES_DB=postgres \
-    PGDATA=/var/lib/postgresql/data
-
-# Create custom initialization script for downloading dump
-RUN cat > /docker-entrypoint-initdb.d/00-download-dump.sh <<'SCRIPT_EOF'
-#!/bin/bash
-set -e
-
-echo "=========================================="
-echo "Downloading Database Dump from GitHub"
-echo "=========================================="
-
-DUMP_FILE="/docker-entrypoint-initdb.d/backup.dump"
-
-# Check if dump already exists
-if [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then
-  SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
-  if [ "$SIZE" -gt 100000 ]; then
-    echo "✓ Valid dump file already exists"
-    ls -lh "$DUMP_FILE"
-    exit 0
-  fi
-fi
-
-# Check for GITHUB_TOKEN
-if [ -z "$GITHUB_TOKEN" ]; then
-  echo "ERROR: GITHUB_TOKEN not set. Database will start empty."
-  exit 0
-fi
-
-# Set defaults
-GITHUB_REPO="${GITHUB_REPO:-tyoshilab/bus-delay-predictor-ml}"
-RELEASE_TAG="${RELEASE_TAG:-v1.0.0}"
-ASSET_NAME="${ASSET_NAME:-gtfs_db.dump}"
-
-echo "Repository: $GITHUB_REPO"
-echo "Release: $RELEASE_TAG"
-echo "Asset: $ASSET_NAME"
-
-# Get asset ID
-RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
-ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github.v3+json" \
-  "$RELEASE_API_URL" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    for asset in data.get('assets', []):
-        if asset.get('name') == '$ASSET_NAME':
-            print(asset.get('id'))
-            break
-except:
-    pass
-" 2>/dev/null)
-
-if [ -z "$ASSET_ID" ]; then
-  echo "✗ Asset not found. Database will start empty."
-  exit 0
-fi
-
-# Download dump
-ASSET_URL="https://api.github.com/repos/$GITHUB_REPO/releases/assets/$ASSET_ID"
-echo "Downloading from GitHub API..."
-
-if curl -L -f --progress-bar \
-  -H "Authorization: token $GITHUB_TOKEN" \
-  -H "Accept: application/octet-stream" \
-  -o "$DUMP_FILE" \
-  "$ASSET_URL"; then
-  
-  SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
-  if [ "$SIZE" -lt 100000 ]; then
-    echo "ERROR: File too small ($SIZE bytes)"
-    rm -f "$DUMP_FILE"
-    exit 0
-  fi
-  echo "✓ Downloaded successfully: $SIZE bytes"
-else
-  echo "✗ Download failed. Database will start empty."
-fi
-SCRIPT_EOF
+    PGDATA=/var/lib/postgresql/data/pgdata
 
 # Create PostGIS initialization script
 RUN cat > /docker-entrypoint-initdb.d/01-enable-postgis.sh <<'SCRIPT_EOF'
@@ -119,20 +42,20 @@ DUMP_FILE="/docker-entrypoint-initdb.d/backup.dump"
 if [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then
   SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
   echo "Dump size: $(du -h $DUMP_FILE | cut -f1) ($SIZE bytes)"
-  
+
   if [ "$SIZE" -lt 100000 ]; then
     echo "ERROR: Dump file too small, skipping"
     exit 0
   fi
-  
+
   echo "Starting restore: $(date)"
   JOBS=$(nproc 2>/dev/null || echo "2")
   echo "Using $JOBS parallel jobs"
-  
+
   pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl --jobs=$JOBS "$DUMP_FILE" 2>&1 | head -100 || echo "Restore completed with warnings"
-  
+
   echo "===== Restore completed: $(date) ====="
-  
+
   if [ "$CLEANUP_DUMP" = "true" ]; then
     rm -f "$DUMP_FILE"
   fi
@@ -142,9 +65,12 @@ fi
 SCRIPT_EOF
 
 # Make scripts executable
-RUN chmod +x /docker-entrypoint-initdb.d/00-download-dump.sh && \
-    chmod +x /docker-entrypoint-initdb.d/01-enable-postgis.sh && \
+RUN chmod +x /docker-entrypoint-initdb.d/01-enable-postgis.sh && \
     chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh
+
+# Copy custom entrypoint for GitHub download and Railway volume fix
+COPY db_entrypoint.sh /usr/local/bin/db_entrypoint.sh
+RUN chmod +x /usr/local/bin/db_entrypoint.sh
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
@@ -154,5 +80,9 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
 EXPOSE 5432
 
 # NOTE: VOLUME keyword is NOT used (Railway requirement)
-# NOTE: Do NOT override ENTRYPOINT - use the original from postgis/postgis
-# NOTE: Do NOT set USER - the original entrypoint handles this
+# Railway will mount volume at /var/lib/postgresql/data
+# PostgreSQL will use /var/lib/postgresql/data/pgdata
+
+# Use custom entrypoint
+ENTRYPOINT ["/usr/local/bin/db_entrypoint.sh"]
+CMD ["postgres"]
