@@ -22,8 +22,9 @@ RUN mkdir -p /var/lib/postgresql/data && \
     chown -R postgres:postgres /var/lib/postgresql && \
     chmod -R 700 /var/lib/postgresql/data
 
-# Create initialization directory
-RUN mkdir -p /docker-entrypoint-initdb.d
+# Create initialization directory with proper ownership
+RUN mkdir -p /docker-entrypoint-initdb.d && \
+    chown postgres:postgres /docker-entrypoint-initdb.d
 
 # Create PostGIS initialization script
 RUN cat > /docker-entrypoint-initdb.d/00-enable-postgis.sh <<'SCRIPT_EOF'
@@ -38,8 +39,6 @@ EOSQL
 echo "===== $(date): PostGIS extension enabled ====="
 SCRIPT_EOF
 
-RUN chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh
-
 # Create optimized restore script with parallel processing
 RUN cat > /docker-entrypoint-initdb.d/99-restore-dump.sh <<'SCRIPT_EOF'
 #!/bin/sh
@@ -50,21 +49,21 @@ DUMP_FILE="/docker-entrypoint-initdb.d/backup.dump"
 if [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then
   SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
   echo "Dump size: $(du -h $DUMP_FILE | cut -f1) ($SIZE bytes)"
-  
+
   if [ "$SIZE" -lt 100000 ]; then
     echo "ERROR: Dump file is too small, likely an error page"
     echo "Skipping restore. Database will start empty."
     exit 0
   fi
-  
+
   echo "Start restore: $(date)"
   JOBS=$(nproc 2>/dev/null || echo "2")
   echo "Using $JOBS parallel jobs for restore"
-  
+
   pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl --jobs=$JOBS "$DUMP_FILE" 2>&1 | head -100 || echo "Restore completed with warnings"
-  
+
   echo "===== $(date): Restore completed ====="
-  
+
   # Clean up dump file to save space if requested
   if [ "$CLEANUP_DUMP" = "true" ]; then
     echo "Removing dump file to save space..."
@@ -77,7 +76,11 @@ else
 fi
 SCRIPT_EOF
 
-RUN chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh
+# Set proper ownership and permissions for all initialization scripts
+RUN chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh && \
+    chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh && \
+    chown postgres:postgres /docker-entrypoint-initdb.d/00-enable-postgis.sh && \
+    chown postgres:postgres /docker-entrypoint-initdb.d/99-restore-dump.sh
 
 # Copy custom entrypoint for GitHub download
 COPY db_entrypoint.sh /usr/local/bin/db_entrypoint.sh
@@ -92,6 +95,9 @@ EXPOSE 5432
 
 # NOTE: VOLUME keyword is NOT used (Railway requirement)
 # Configure volume via Railway Dashboard: /var/lib/postgresql/data (10GB+)
+
+# NOTE: Do NOT set USER directive here
+# The original docker-entrypoint.sh handles user switching from root to postgres
 
 # Use custom entrypoint that downloads dump before starting PostgreSQL
 ENTRYPOINT ["/usr/local/bin/db_entrypoint.sh"]

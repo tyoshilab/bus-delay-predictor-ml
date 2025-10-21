@@ -86,7 +86,7 @@ except:
       # Download dump file using API with Accept header for binary content
       echo "Downloading database dump from GitHub API..."
       echo "This may take several minutes for large dumps..."
-      
+
       if curl -L -f --progress-bar \
         -H "Authorization: token $GITHUB_TOKEN" \
         -H "Accept: application/octet-stream" \
@@ -125,7 +125,7 @@ echo "Starting PostgreSQL..."
 echo "=========================================="
 echo ""
 
-# IMPORTANT: Execute the original PostgreSQL docker-entrypoint.sh
-# This must be run as postgres user, not root
-# The postgis/postgis image handles the user switching internally
-exec docker-entrypoint.sh "$@"
+# CRITICAL: Execute the original PostgreSQL docker-entrypoint.sh
+# The original entrypoint MUST be at /usr/local/bin/docker-entrypoint.sh
+# It handles user switching from root to postgres internally using gosu
+exec /usr/local/bin/docker-entrypoint.sh "$@"
