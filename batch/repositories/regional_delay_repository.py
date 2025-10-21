@@ -50,7 +50,7 @@ class RegionalDelayRepository:
                 gtfs_status.is_weekend,
                 gtfs_status.arrival_delay,
                 gtfs_status.stop_sequence as line_direction_link_order,
-                gtfs_status.delay_mean_by_stop_datetime as delay_mean_by_route_hour,
+                gtfs_status.delay_mean_by_route_hour,
                 gtfs_status.distance_from_downtown_km,
                 weather.humidex_v as humidex,
                 weather.wind_speed,
