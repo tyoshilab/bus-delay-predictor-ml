@@ -273,7 +273,7 @@ class GTFSRealtimeFetchJob(DatabaseJob):
                     # ベースビューのみをCONCURRENTLYでリフレッシュ（高速、ブロックなし）
                     refresh_success = refresh_materialized_views(
                         conn,
-                        view_type='all',
+                        view_type='base',
                         concurrent=True
                     )
 
