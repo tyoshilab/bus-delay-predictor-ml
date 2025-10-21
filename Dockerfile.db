@@ -1,42 +1,23 @@
-# Multi-stage Dockerfile for GTFS PostgreSQL Database with PostGIS
-# Production-ready with dump restore from GitHub resources
-# Railway-compatible: Optimized for faster deployments
+# Dockerfile for GTFS PostgreSQL Database with PostGIS
+# Production-ready with dump restore from GitHub private repository
+# Railway-compatible: Uses runtime download instead of build-time
 
-# Stage 1: Download dump file from GitHub
-FROM alpine:latest as downloader
-
-# Install curl with compression support
-RUN apk add --no-cache curl
-
-# Set build arguments for GitHub resource URL
-ARG GITHUB_REPO_URL="https://github.com/tyoshilab/bus-delay-predictor-ml/releases/download"
-ARG DUMP_VERSION="v1.0.0"
-ARG DUMP_FILENAME="gtfs_db.dump"
-
-# Download the database dump from GitHub resources
-WORKDIR /tmp
-RUN echo "===== Downloading database dump from GitHub =====" && \
-    echo "URL: ${GITHUB_REPO_URL}/${DUMP_VERSION}/${DUMP_FILENAME}" && \
-    echo "Start time: $(date)" && \
-    curl -L --progress-bar -o backup.dump \
-    "${GITHUB_REPO_URL}/${DUMP_VERSION}/${DUMP_FILENAME}" || \
-    (echo "Failed to download dump file. Will skip restore." && touch backup.dump) && \
-    echo "Download completed: $(date)" && \
-    echo "File size: $(du -h backup.dump | cut -f1)"
-
-# Stage 2: PostgreSQL with PostGIS
 FROM postgis/postgis:17-3.6-alpine
 
 # Install required tools
-RUN apk add --no-cache postgresql-client
+RUN apk add --no-cache \
+    postgresql-client \
+    python3 \
+    curl \
+    bash
 
-# Set environment variables with defaults
+# Set environment variables with defaults (overridable via docker-compose)
 ENV POSTGRES_PASSWORD=postgres \
     POSTGRES_USER=postgres \
     POSTGRES_DB=postgres \
     PGDATA=/var/lib/postgresql/data
 
-# Ensure postgres user ownership and proper permissions
+# Ensure postgres user ownership and proper permissions for Railway volumes
 RUN mkdir -p /var/lib/postgresql/data && \
     chown -R postgres:postgres /var/lib/postgresql && \
     chmod -R 700 /var/lib/postgresql/data
@@ -44,16 +25,63 @@ RUN mkdir -p /var/lib/postgresql/data && \
 # Create initialization directory
 RUN mkdir -p /docker-entrypoint-initdb.d
 
-# Copy dump file from downloader stage
-COPY --from=downloader /tmp/backup.dump /docker-entrypoint-initdb.d/backup.dump
-
 # Create PostGIS initialization script
-RUN printf '#!/bin/sh\nset -e\necho "===== $(date): Enabling PostGIS ====="\npsql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL\nCREATE EXTENSION IF NOT EXISTS postgis;\nCREATE EXTENSION IF NOT EXISTS postgis_topology;\nSELECT PostGIS_version();\nEOSQL\necho "===== $(date): PostGIS enabled ====="\n' > /docker-entrypoint-initdb.d/00-enable-postgis.sh && \
-    chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh
+RUN cat > /docker-entrypoint-initdb.d/00-enable-postgis.sh <<'SCRIPT_EOF'
+#!/bin/sh
+set -e
+echo "===== $(date): Enabling PostGIS extension ====="
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+  CREATE EXTENSION IF NOT EXISTS postgis;
+  CREATE EXTENSION IF NOT EXISTS postgis_topology;
+  SELECT PostGIS_version();
+EOSQL
+echo "===== $(date): PostGIS extension enabled ====="
+SCRIPT_EOF
+
+RUN chmod +x /docker-entrypoint-initdb.d/00-enable-postgis.sh
 
 # Create optimized restore script with parallel processing
-RUN printf '#!/bin/sh\nset -e\necho "===== $(date): Checking dump file ====="\nDUMP_FILE="/docker-entrypoint-initdb.d/backup.dump"\nif [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then\n  echo "Dump size: $(du -h $DUMP_FILE | cut -f1)"\n  echo "Start restore: $(date)"\n  JOBS=$(nproc 2>/dev/null || echo "2")\n  echo "Using $JOBS parallel jobs"\n  pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl --jobs=$JOBS "$DUMP_FILE" 2>&1 | head -100 || echo "Restore completed with warnings"\n  echo "===== $(date): Restore completed ====="\n  [ "$CLEANUP_DUMP" = "true" ] && rm -f "$DUMP_FILE" || echo "Dump retained"\nelse\n  echo "No dump file found"\nfi\n' > /docker-entrypoint-initdb.d/99-restore-dump.sh && \
-    chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh
+RUN cat > /docker-entrypoint-initdb.d/99-restore-dump.sh <<'SCRIPT_EOF'
+#!/bin/sh
+set -e
+echo "===== $(date): Checking dump file ====="
+DUMP_FILE="/docker-entrypoint-initdb.d/backup.dump"
+
+if [ -f "$DUMP_FILE" ] && [ -s "$DUMP_FILE" ]; then
+  SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE" 2>/dev/null)
+  echo "Dump size: $(du -h $DUMP_FILE | cut -f1) ($SIZE bytes)"
+  
+  if [ "$SIZE" -lt 100000 ]; then
+    echo "ERROR: Dump file is too small, likely an error page"
+    echo "Skipping restore. Database will start empty."
+    exit 0
+  fi
+  
+  echo "Start restore: $(date)"
+  JOBS=$(nproc 2>/dev/null || echo "2")
+  echo "Using $JOBS parallel jobs for restore"
+  
+  pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v --no-owner --no-acl --jobs=$JOBS "$DUMP_FILE" 2>&1 | head -100 || echo "Restore completed with warnings"
+  
+  echo "===== $(date): Restore completed ====="
+  
+  # Clean up dump file to save space if requested
+  if [ "$CLEANUP_DUMP" = "true" ]; then
+    echo "Removing dump file to save space..."
+    rm -f "$DUMP_FILE"
+  else
+    echo "Dump file retained (set CLEANUP_DUMP=true to remove)"
+  fi
+else
+  echo "No valid dump file found. Database will start empty."
+fi
+SCRIPT_EOF
+
+RUN chmod +x /docker-entrypoint-initdb.d/99-restore-dump.sh
+
+# Copy custom entrypoint for GitHub download
+COPY db_entrypoint.sh /usr/local/bin/db_entrypoint.sh
+RUN chmod +x /usr/local/bin/db_entrypoint.sh
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
@@ -65,5 +93,8 @@ EXPOSE 5432
 # NOTE: VOLUME keyword is NOT used (Railway requirement)
 # Configure volume via Railway Dashboard: /var/lib/postgresql/data (10GB+)
 
-# Run as postgres user
-USER postgres
+# Use custom entrypoint that downloads dump before starting PostgreSQL
+ENTRYPOINT ["/usr/local/bin/db_entrypoint.sh"]
+
+# Default command for PostgreSQL
+CMD ["postgres"]

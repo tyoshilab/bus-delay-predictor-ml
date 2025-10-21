@@ -4,22 +4,15 @@
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.db"
 
-# Build arguments for downloading database dump from GitHub
-# These can be overridden via Railway environment variables
-[build.buildArgs]
-GITHUB_REPO_URL = "https://github.com/taitalabs/vancoucer-bus-science/releases/download"
-DUMP_VERSION = "v1.0.0"
-DUMP_FILENAME = "gtfs_db.dump"
-
 # Optional: Watch patterns to trigger deployments only when specific files change
 # Uncomment to enable conditional deployments (saves build time and costs)
-watchPatterns = ["Dockerfile.db", "DB/**"]
+watchPatterns = ["Dockerfile.db", "db_entrypoint.sh", "DB/**"]
 
 # ═══════════════════════════════════════════════════════════
 # Deploy Configuration
 # ═══════════════════════════════════════════════════════════
 [deploy]
-# PostgreSQL uses default postgres entrypoint
+# PostgreSQL uses custom entrypoint that downloads dump from GitHub
 # No need to override startCommand
 
 # Restart policy - ALWAYS restart for database
