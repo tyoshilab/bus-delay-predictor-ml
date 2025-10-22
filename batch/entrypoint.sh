@@ -72,7 +72,7 @@ if [ ! -f "$MODEL_FILE" ]; then
     # For private repositories, use GitHub API to get the asset download URL
     # Set default values if not provided
     GITHUB_REPO="${GITHUB_REPO:-tyoshilab/bus-delay-predictor-ml}"
-    RELEASE_TAG="${RELEASE_TAG:-model-v1.0}"
+    RELEASE_TAG="${RELEASE_TAG:-latest}"
     ASSET_NAME="${ASSET_NAME:-best_delay_model.h5}"
 
     echo "Repository: $GITHUB_REPO"
@@ -80,7 +80,11 @@ if [ ! -f "$MODEL_FILE" ]; then
     echo "Asset: $ASSET_NAME"
 
     # Get release information
-    RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
+    if [ "$RELEASE_TAG" = "latest" ]; then
+      RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+    else
+      RELEASE_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
+    fi
     echo "Fetching release info from API..."
 
     # Download release info and extract asset ID using Python
