@@ -122,7 +122,7 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         self.logger.info(f"Found {len(regions)} regions: {regions}")
         return regions
 
-    def predict_region(self, region_id: str) -> Optional[pd.DataFrame]:
+    def predict_region(self, region_id: str) -> Optional[Dict[str, Any]]:
         """
         特定地域の遅延予測を実行
 
@@ -130,7 +130,7 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             region_id: 地域ID
 
         Returns:
-            予測結果のDataFrame
+            予測結果を含む辞書 {'predictions': DataFrame, 'metadata': Dict}
         """
         start_time = time.time()
         self.logger.info(f"Starting prediction for region: {region_id}")
@@ -146,6 +146,14 @@ class RegionalDelayPredictionJob(DataProcessingJob):
 
             self.logger.info(f"  Retrieved {len(data)} records")
 
+            # 入力データの時間範囲を記録
+            if 'time_bucket' in data.columns:
+                input_data_start = data['time_bucket'].min()
+                input_data_end = data['time_bucket'].max()
+            else:
+                input_data_start = None
+                input_data_end = None
+
             # 2. シーケンス作成
             self.logger.info(f"  [2/6] Creating sequences...")
             X_delay, y_delay, metadata, features_used, group_info = \
@@ -157,7 +165,8 @@ class RegionalDelayPredictionJob(DataProcessingJob):
                 self.logger.warning(f"  No sequences created for region: {region_id}")
                 return None
 
-            self.logger.info(f"  Created {len(X_delay)} sequences")
+            sequence_count = len(X_delay)
+            self.logger.info(f"  Created {sequence_count} sequences")
 
             # 3. データ標準化
             self.logger.info(f"  [3/6] Standardizing features...")
@@ -186,7 +195,14 @@ class RegionalDelayPredictionJob(DataProcessingJob):
                 f"({len(predictions_df)} predictions)"
             )
 
-            return predictions_df
+            return {
+                'predictions': predictions_df,
+                'metadata': {
+                    'input_data_start': input_data_start,
+                    'input_data_end': input_data_end,
+                    'sequence_count': sequence_count
+                }
+            }
 
         except Exception as e:
             self.logger.error(f"  Failed to predict region {region_id}: {e}", exc_info=True)
@@ -275,7 +291,10 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         self,
         predictions_df: pd.DataFrame,
         model_version: Optional[str] = None,
-        execution_time_ms: Optional[int] = None
+        execution_time_ms: Optional[int] = None,
+        input_data_start: Optional[datetime] = None,
+        input_data_end: Optional[datetime] = None,
+        sequence_count: Optional[int] = None
     ):
         """予測結果をデータベースに保存"""
         if predictions_df is None or predictions_df.empty:
@@ -283,16 +302,32 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             return
 
         try:
+            # DataFrameをコピーして元のデータを変更しない
+            df_to_save = predictions_df.copy()
+
             # モデル情報を追加
-            predictions_df['model_version'] = model_version or Path(self.model_path).stem
-            predictions_df['model_path'] = self.model_path
-            predictions_df['prediction_execution_time_ms'] = execution_time_ms
+            df_to_save['model_version'] = model_version or Path(self.model_path).stem
+            df_to_save['model_path'] = self.model_path
+            df_to_save['prediction_execution_time_ms'] = execution_time_ms
 
-            # データベースに保存
-            table_name = 'gtfs_realtime.regional_delay_predictions'
-            self.db_connector.insert_dataframe(predictions_df, table_name)
+            # データ品質情報を追加
+            df_to_save['input_data_start'] = input_data_start
+            df_to_save['input_data_end'] = input_data_end
+            df_to_save['sequence_count'] = sequence_count
+            df_to_save['confidence_score'] = None  # 将来の拡張用
 
-            self.logger.info(f"Saved {len(predictions_df)} predictions to database")
+            # データベースに保存（スキーマとテーブル名を分離）
+            table_name = 'regional_delay_predictions'
+            schema = 'gtfs_realtime'
+
+            self.db_connector.insert_dataframe(
+                df_to_save,
+                table_name=table_name,
+                schema=schema,
+                if_exists='append'
+            )
+
+            self.logger.info(f"Saved {len(df_to_save)} predictions to {schema}.{table_name}")
 
         except Exception as e:
             self.logger.error(f"Failed to save predictions: {e}", exc_info=True)
@@ -338,22 +373,32 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             self.logger.info(f"\n[{idx}/{len(regions)}] Processing region: {region_id}")
 
             region_start = time.time()
-            predictions_df = self.predict_region(region_id)
+            result = self.predict_region(region_id)
             region_elapsed = int((time.time() - region_start) * 1000)
 
-            if predictions_df is not None and not predictions_df.empty:
-                prediction_count = len(predictions_df)
-                region_results[region_id] = prediction_count
-                total_predictions += prediction_count
+            if result is not None:
+                predictions_df = result['predictions']
+                metadata = result['metadata']
 
-                # データベースに保存（dry_runでない場合）
-                if not dry_run:
-                    self.save_predictions(
-                        predictions_df,
-                        execution_time_ms=region_elapsed
-                    )
+                if predictions_df is not None and not predictions_df.empty:
+                    prediction_count = len(predictions_df)
+                    region_results[region_id] = prediction_count
+                    total_predictions += prediction_count
+
+                    # データベースに保存（dry_runでない場合）
+                    if not dry_run:
+                        self.save_predictions(
+                            predictions_df,
+                            execution_time_ms=region_elapsed,
+                            input_data_start=metadata.get('input_data_start'),
+                            input_data_end=metadata.get('input_data_end'),
+                            sequence_count=metadata.get('sequence_count')
+                        )
+                    else:
+                        self.logger.info(f"  [DRY RUN] Would save {prediction_count} predictions")
                 else:
-                    self.logger.info(f"  [DRY RUN] Would save {prediction_count} predictions")
+                    region_results[region_id] = 0
+                    self.logger.warning(f"  No predictions generated for {region_id}")
             else:
                 region_results[region_id] = 0
                 self.logger.warning(f"  No predictions generated for {region_id}")
