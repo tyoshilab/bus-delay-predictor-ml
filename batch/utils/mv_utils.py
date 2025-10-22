@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def refresh_materialized_views(
     connection,
     view_type: Literal['all', 'base', 'enriched', 'analytics'] = 'base',
-    concurrent: bool = True
+    concurrent: bool = False  # Changed from True to False to save memory
 ) -> bool:
     """
     マテリアライズドビューをリフレッシュ

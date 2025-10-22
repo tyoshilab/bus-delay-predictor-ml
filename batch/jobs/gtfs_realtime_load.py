@@ -270,11 +270,11 @@ class GTFSRealtimeFetchJob(DatabaseJob):
                 db_connector = DatabaseConnector()
 
                 with db_connector.get_connection() as conn:
-                    # ベースビューのみをCONCURRENTLYでリフレッシュ（高速、ブロックなし）
+                    # ベースビューのみをリフレッシュ（メモリ節約のため非並行モード）
                     refresh_success = refresh_materialized_views(
                         conn,
                         view_type='base',
-                        concurrent=True
+                        concurrent=False
                     )
 
                     if refresh_success:
