@@ -61,7 +61,7 @@ class RegionalDelayRepository:
             FROM gtfs_realtime.gtfs_rt_analytics_mv gtfs_status
             INNER JOIN climate.weather_hourly weather
                 ON gtfs_status.datetime_60 = to_timestamp(weather.unixtime)
-            WHERE gtfs_status.datetime_60 >= CURRENT_TIMESTAMP - INTERVAL '8 hours'
+            WHERE gtfs_status.datetime_60 >= CURRENT_TIMESTAMP - INTERVAL '9 hours'
                 AND gtfs_status.region_id = '{region_id}'
             ORDER BY gtfs_status.datetime_60, gtfs_status.route_id,
                         gtfs_status.direction_id, gtfs_status.stop_sequence;
