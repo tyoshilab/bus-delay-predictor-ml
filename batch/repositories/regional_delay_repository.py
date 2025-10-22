@@ -25,7 +25,8 @@ class RegionalDelayRepository:
     def find_predict_status(self, region_id: str) -> Optional[Dict]:
         """
         Find prediction status for a region with stop information.
-        Retrieves last 8 hours of data for model input.
+        Retrieves last 9 hours of data for model input.
+        (9 hours is used because climate data is only available up to 1 hour ago)
 
         Args:
             region_id: Region identifier

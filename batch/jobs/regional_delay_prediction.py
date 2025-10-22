@@ -154,11 +154,11 @@ class RegionalDelayPredictionJob(DataProcessingJob):
                 input_data_start = None
                 input_data_end = None
 
-            # 2. シーケンス作成
-            self.logger.info(f"  [2/6] Creating sequences...")
-            X_delay, y_delay, metadata, features_used, group_info = \
-                self.sequence_creator.create_route_direction_aware_sequences(
-                    data, spatial_organization=True
+            # 2. シーケンス作成（バス停ごと）
+            self.logger.info(f"  [2/6] Creating sequences (per stop)...")
+            X_delay, _, metadata, _, _ = \
+                self.sequence_creator.create_stop_aware_sequences(
+                    data, spatial_organization=True, prediction_mode=True
                 )
 
             if X_delay is None or len(X_delay) == 0:
@@ -215,7 +215,7 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         original_data: pd.DataFrame,
         region_id: str
     ) -> pd.DataFrame:
-        """予測結果をDataFrameにデコード"""
+        """予測結果をDataFrameにデコード（バス停ごと）"""
         # バス停情報キャッシュ構築
         stop_cache = self._build_stop_cache(original_data)
 
@@ -233,15 +233,21 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         next_hour = current_time.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
         results = []
-        for idx, rd_key in enumerate(metadata):
-            # route_id, direction_idをパース
-            parts = rd_key.split('_')
+        for idx, rds_key in enumerate(metadata):
+            # route_id, direction_id, stop_idをパース
+            parts = rds_key.split('_')
+            if len(parts) < 3:
+                self.logger.warning(f"Invalid metadata key format: {rds_key}")
+                continue
+
             route_id = parts[0]
             direction_id = int(parts[1])
+            stop_id = '_'.join(parts[2:])  # stop_idにアンダースコアが含まれる可能性を考慮
 
             # バス停情報取得
-            stop_info = stop_cache.get(f"{route_id}_{direction_id}")
+            stop_info = stop_cache.get(f"{route_id}_{direction_id}_{stop_id}")
             if not stop_info:
+                self.logger.warning(f"Stop info not found for key: {route_id}_{direction_id}_{stop_id}")
                 continue
 
             # 各時間オフセットの予測（次の0分時点から開始）
@@ -270,14 +276,14 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         return pd.DataFrame(results)
 
     def _build_stop_cache(self, data: pd.DataFrame) -> Dict:
-        """バス停情報のキャッシュ構築"""
+        """バス停情報のキャッシュ構築（バス停ごと）"""
         cache = {}
         grouped = data.sort_values('time_bucket', ascending=False).groupby(
-            ['route_id', 'direction_id'], as_index=False
+            ['route_id', 'direction_id', 'stop_id'], as_index=False
         ).first()
 
         for _, row in grouped.iterrows():
-            cache_key = f"{row['route_id']}_{row['direction_id']}"
+            cache_key = f"{row['route_id']}_{row['direction_id']}_{row['stop_id']}"
             cache[cache_key] = {
                 'stop_id': str(row.get('stop_id', 'unknown')),
                 'stop_name': row.get('stop_name'),

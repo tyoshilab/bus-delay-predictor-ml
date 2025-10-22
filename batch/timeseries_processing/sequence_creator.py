@@ -50,12 +50,165 @@ class SequenceCreator:
         
         return organized_features, group_info
     
-    def create_route_direction_aware_sequences(self, data, target_col=None, feature_cols=None, 
+    def create_stop_aware_sequences(self, data, target_col=None, feature_cols=None,
+                                   route_col='route_id', direction_col='direction_id',
+                                   stop_col='stop_id', spatial_organization=True,
+                                   prediction_mode=False):
+        """
+        route_id + direction_id + stop_id別の時系列シーケンスを作成（バス停ごとの予測用）
+
+        Args:
+            data (pd.DataFrame): 入力データ
+            target_col (str): 予測対象カラム名（Noneの場合は'arrival_delay'を使用）
+            feature_cols (list): 特徴量カラムリスト（Noneの場合はfeature_groupsから自動生成）
+            route_col (str): 路線IDカラム名
+            direction_col (str): 方向IDカラム名
+            stop_col (str): バス停IDカラム名
+            spatial_organization (bool): ConvLSTM用の空間配置を使用するか
+            prediction_mode (bool): True=予測モード（yは空配列）, False=学習モード（yは実データ）
+
+        Returns:
+            tuple: (X配列, y配列, route_direction_stop情報, 使用特徴量リスト, グループ情報)
+        """
+        X_all, y_all = [], []
+        route_direction_stop_info = []  # route_id + direction_id + stop_id情報を保持
+
+        # デフォルト値の設定
+        if target_col is None:
+            target_col = 'arrival_delay'
+
+        if feature_cols is None:
+            feature_cols = self.get_all_features_from_groups()
+            print(f"Using feature_groups to generate feature list: {feature_cols}")
+
+        print(f"=== Stop-Aware Sequence Creation (Route + Direction + Stop) ===")
+        print(f"Mode: {'Prediction' if prediction_mode else 'Training'}")
+        print(f"Input time series length: {self.input_timesteps} hours")
+        print(f"Prediction time series length: {self.output_timesteps} hours")
+        print(f"Target column: {target_col}")
+        print(f"Feature columns: {feature_cols}")
+        print(f"Spatial organization: {spatial_organization}")
+
+        # 特徴量の空間配置（ConvLSTM用）
+        if spatial_organization:
+            organized_features, group_info = self.organize_features_spatially(feature_cols)
+            # 利用可能な特徴量のフィルタリング（空間配置順序を保持）
+            available_features = [col for col in organized_features if col in data.columns]
+            missing_features = [col for col in organized_features if col not in data.columns]
+        else:
+            # 従来の順序
+            available_features = [col for col in feature_cols if col in data.columns]
+            missing_features = [col for col in feature_cols if col not in data.columns]
+            group_info = None
+
+        if missing_features:
+            print(f"Warning: Missing features will be skipped: {missing_features}")
+
+        print(f"Using features (in spatial order): {available_features}")
+
+        # route_id + direction_id + stop_idの組み合わせごとにシーケンスを作成
+        total_sequences = 0
+        processed_stops = 0
+        skipped_stops = 0
+
+        for route_id in data[route_col].unique():
+            for direction_id in data[data[route_col] == route_id][direction_col].unique():
+                route_direction_data = data[
+                    (data[route_col] == route_id) & (data[direction_col] == direction_id)
+                ]
+
+                # このroute+directionに含まれるバス停を処理
+                for stop_id in route_direction_data[stop_col].unique():
+                    # 特定のroute_id + direction_id + stop_idのデータを抽出
+                    stop_data = route_direction_data[
+                        route_direction_data[stop_col] == stop_id
+                    ].copy()
+
+                    # 時間順にソート
+                    stop_data = stop_data.sort_values('time_bucket').reset_index(drop=True)
+
+                    route_direction_stop_key = f"{route_id}_{direction_id}_{stop_id}"
+
+                    # 予測モードと学習モードで必要なデータ長が異なる
+                    if prediction_mode:
+                        # 予測モード: 最新のinput_timesteps分のみ必要
+                        min_required_length = self.input_timesteps
+                    else:
+                        # 学習モード: input + output が必要
+                        min_required_length = self.input_timesteps + self.output_timesteps
+
+                    if len(stop_data) >= min_required_length:
+                        # 利用可能な特徴量のみを使用（空間配置順序）
+                        try:
+                            features = stop_data[available_features].values
+
+                            X_stop, y_stop = [], []
+
+                            if prediction_mode:
+                                # 予測モード: 最新のinput_timesteps分のみ使用
+                                X_stop.append(features[-self.input_timesteps:])
+                                # yは空のまま（ダミー値として空配列を追加）
+                                y_stop.append(np.zeros(self.output_timesteps))
+                            else:
+                                # 学習モード: スライディングウィンドウで全シーケンス作成
+                                for i in range(len(features) - self.input_timesteps - self.output_timesteps + 1):
+                                    # 入力シーケンス（過去のデータ）
+                                    X_stop.append(features[i:i+self.input_timesteps])
+
+                                    # 出力シーケンス（予測対象）
+                                    target_start = i + self.input_timesteps
+                                    target_end = target_start + self.output_timesteps
+
+                                    # target_colのインデックスを取得
+                                    target_idx = available_features.index(target_col)
+                                    y_stop.append(features[target_start:target_end, target_idx])
+
+                            if len(X_stop) > 0:
+                                X_stop = np.array(X_stop)
+                                y_stop = np.array(y_stop)
+
+                                X_all.append(X_stop)
+                                y_all.append(y_stop)
+                                route_direction_stop_info.extend([route_direction_stop_key] * len(X_stop))
+
+                                total_sequences += len(X_stop)
+                                processed_stops += 1
+                            else:
+                                skipped_stops += 1
+
+                        except Exception as e:
+                            print(f"Error processing stop {stop_id} on route {route_id} direction {direction_id}: {str(e)}")
+                            skipped_stops += 1
+                    else:
+                        skipped_stops += 1
+
+        print(f"\nProcessed {processed_stops} stops, skipped {skipped_stops} stops (insufficient data)")
+
+        if X_all:
+            X_combined = np.concatenate(X_all, axis=0)
+            y_combined = np.concatenate(y_all, axis=0)
+
+            print(f"Total sequences: {len(X_combined)}")
+            print(f"X shape: {X_combined.shape}")
+            print(f"y shape: {y_combined.shape}")
+            print(f"Features used: {len(available_features)} out of {len(feature_cols)}")
+
+            if spatial_organization and group_info:
+                print(f"\n=== Spatial Organization Summary ===")
+                for group_name, info in group_info.items():
+                    print(f"{group_name.capitalize()}: {info['features']} (width indices {info['start_idx']}-{info['end_idx']-1})")
+
+            return X_combined, y_combined, route_direction_stop_info, available_features, group_info
+        else:
+            print("\nSequence creation failed")
+            return np.array([]), np.array([]), [], available_features, group_info
+
+    def create_route_direction_aware_sequences(self, data, target_col=None, feature_cols=None,
                                               route_col='route_id', direction_col='direction_id',
                                               spatial_organization=True):
         """
-        route_id + direction_id別の時系列シーケンスを作成
-        
+        route_id + direction_id別の時系列シーケンスを作成（後方互換性のため保持）
+
         Args:
             data (pd.DataFrame): 入力データ
             target_col (str): 予測対象カラム名（Noneの場合は'arrival_delay'を使用）
@@ -63,7 +216,7 @@ class SequenceCreator:
             route_col (str): 路線IDカラム名
             direction_col (str): 方向IDカラム名
             spatial_organization (bool): ConvLSTM用の空間配置を使用するか
-            
+
         Returns:
             tuple: (X配列, y配列, route_direction情報, 使用特徴量リスト, グループ情報)
         """
