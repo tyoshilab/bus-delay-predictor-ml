@@ -159,8 +159,8 @@ cat >> /tmp/gtfs-batch << 'CRONEOF'
 # GTFS Realtime Fetch (every hour at minute 0 and 30)
 0,30 * * * * batchuser cd /app && python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
 
-# Regional Delay Prediction (every hour at minute 10 and 40)
-10,40 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1
+# Regional Delay Prediction (every hour at minute 10)
+10 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1
 
 CRONEOF
 
