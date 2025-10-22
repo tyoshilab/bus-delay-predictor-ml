@@ -189,6 +189,11 @@ class RegionalDelayPredictionJob(DataProcessingJob):
                 y_pred, metadata, data, region_id
             )
 
+            # 予測結果が空の場合は早期リターン
+            if predictions_df.empty:
+                self.logger.warning(f"  No valid predictions decoded for {region_id}")
+                return None
+
             elapsed_time = time.time() - start_time
             self.logger.info(
                 f"  Prediction completed for {region_id} in {elapsed_time:.2f}s "
@@ -252,26 +257,40 @@ class RegionalDelayPredictionJob(DataProcessingJob):
 
             # 各時間オフセットの予測（今の0分時点から開始）
             for hour_offset in range(1, self.output_timesteps + 1):
-                delay_seconds = float(y_pred_2d[idx, hour_offset - 1])
-                delay_minutes = delay_seconds / 60.0
+                try:
+                    delay_seconds = float(y_pred_2d[idx, hour_offset - 1])
 
-                # 0分時点での予測時刻（例: 14:00, 15:00, 16:00...）
-                prediction_target_time = current_hour + timedelta(hours=hour_offset - 1)
+                    # NaNや無限大のチェック
+                    if not np.isfinite(delay_seconds):
+                        self.logger.warning(
+                            f"Invalid prediction value for {rds_key} at offset {hour_offset}: {delay_seconds}"
+                        )
+                        continue
 
-                results.append({
-                    'region_id': region_id,
-                    'route_id': route_id,
-                    'direction_id': direction_id,
-                    'stop_id': stop_info['stop_id'],
-                    'stop_name': stop_info.get('stop_name'),
-                    'stop_lat': stop_info.get('stop_lat'),
-                    'stop_lon': stop_info.get('stop_lon'),
-                    'prediction_created_at': prediction_created_at,
-                    'prediction_target_time': prediction_target_time,
-                    'prediction_hour_offset': hour_offset,
-                    'predicted_delay_seconds': round(delay_seconds, 2),
-                    'predicted_delay_minutes': round(delay_minutes, 2),
-                })
+                    delay_minutes = delay_seconds / 60.0
+
+                    # 0分時点での予測時刻（例: 14:00, 15:00, 16:00...）
+                    prediction_target_time = current_hour + timedelta(hours=hour_offset - 1)
+
+                    results.append({
+                        'region_id': region_id,
+                        'route_id': route_id,
+                        'direction_id': direction_id,
+                        'stop_id': stop_info['stop_id'],
+                        'stop_name': stop_info.get('stop_name'),
+                        'stop_lat': stop_info.get('stop_lat'),
+                        'stop_lon': stop_info.get('stop_lon'),
+                        'prediction_created_at': prediction_created_at,
+                        'prediction_target_time': prediction_target_time,
+                        'prediction_hour_offset': hour_offset,
+                        'predicted_delay_seconds': round(delay_seconds, 2),
+                        'predicted_delay_minutes': round(delay_minutes, 2),
+                    })
+                except (ValueError, IndexError, TypeError) as e:
+                    self.logger.warning(
+                        f"Failed to decode prediction for {rds_key} at offset {hour_offset}: {e}"
+                    )
+                    continue
 
         return pd.DataFrame(results)
 
