@@ -26,15 +26,18 @@ class RegionalDelayRepository:
         query = f"""
             WITH region_hourly AS (
                 SELECT
-                    a.region_id,
-                    DATE_TRUNC('hour', a.datetime_60) AS time_bucket,
-                    MAX(a.stop_lat) AS stop_lat,
-                    MAX(a.stop_lon) AS stop_lon,
-                    AVG(a.arrival_delay) / 60.0 AS avg_delay_minutes
-                FROM gtfs_realtime.gtfs_rt_enriched_mv a
-                WHERE a.datetime_60 >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                AND a.arrival_delay IS NOT NULL
-                GROUP BY a.region_id, time_bucket
+                    se.region_id,
+                    DATE_TRUNC('hour', base.actual_arrival_time) AS time_bucket,
+                    MAX(se.stop_lat) AS stop_lat,
+                    MAX(se.stop_lon) AS stop_lon,
+                    AVG(base.arrival_delay) / 60.0 AS avg_delay_minutes
+                FROM gtfs_realtime.gtfs_rt_base_mv base
+                INNER JOIN gtfs_static.gtfs_stops_enhanced_mv se
+                    ON se.stop_id = base.stop_id
+                WHERE base.actual_arrival_time >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                    AND base.arrival_delay IS NOT NULL
+                    AND se.region_id IS NOT NULL
+                GROUP BY se.region_id, time_bucket
             ),
             ranked AS (
                 SELECT
@@ -49,7 +52,6 @@ class RegionalDelayRepository:
                 avg_delay_minutes
             FROM ranked
             WHERE rn = 1
-            AND region_id IS NOT NULL
             ORDER BY region_id;
         """
 
