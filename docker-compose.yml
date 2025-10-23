@@ -68,7 +68,7 @@ services:
       retries: 3
       start_period: 40s
     # Override CMD for development with hot reload
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # Batch Processing Jobs (Development mode)
   batch:

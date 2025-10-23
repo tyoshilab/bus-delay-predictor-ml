@@ -12,38 +12,23 @@ logger = logging.getLogger(__name__)
 
 
 def refresh_materialized_views(
-    connection,
-    view_type: Literal['all', 'base', 'enriched', 'analytics'] = 'base',
-    concurrent: bool = False  # Changed from True to False to save memory
+    connection
 ) -> bool:
     """
     マテリアライズドビューをリフレッシュ
     
     Args:
         connection: psycopg2 connection object
-        view_type: リフレッシュするビューのタイプ
-            - 'all': すべてのビュー（段階的にリフレッシュ）
-            - 'base': ベースビューのみ（GTFS Realtime用、高速）
-            - 'enriched': enrichedビューまで
-            - 'analytics': analyticsビューまで
-        concurrent: CONCURRENTLYオプションを使用するか（ベースビューのみ）
     
     Returns:
         成功したかどうか
     """
     try:
         with connection.cursor() as cur:
-            if view_type == 'base' and concurrent:
-                # ベースビューのみを並列リフレッシュ（ブロックなし、高速）
-                logger.info("Refreshing base materialized view (CONCURRENTLY)...")
-                cur.execute("CALL gtfs_realtime.refresh_gtfs_views_base_concurrent();")
-                logger.info("✓ Base view refreshed successfully (non-blocking)")
-            else:
-                # 段階的リフレッシュ（ステージングテーブル使用）
-                logger.info(f"Refreshing materialized views (type: {view_type})...")
-                cur.execute(f"CALL gtfs_realtime.refresh_gtfs_views_staged('{view_type}');")
-                logger.info(f"✓ Views refreshed successfully (type: {view_type})")
-            
+            logger.info(f"Refreshing materialized views...")
+            cur.execute(f"CALL gtfs_realtime.refresh_gtfs_views_staged();")
+            logger.info(f"✓ Views refreshed successfully")
+
             connection.commit()
             return True
             

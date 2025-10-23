@@ -131,7 +131,7 @@ FROM gtfs_realtime.regional_delay_predictions p
 INNER JOIN latest_batch lb
     ON p.region_id = lb.region_id
     AND p.prediction_created_at = lb.latest_time
-ORDER BY p.region_id, p.route_id, p.direction_id, p.prediction_hour_offset;
+ORDER BY p.region_id, p.route_id, p.direction_id, p.stop_id, p.prediction_hour_offset;
 
 COMMENT ON VIEW gtfs_realtime.regional_predictions_latest
     IS '各地域の最新予測バッチのみを表示（API用）';

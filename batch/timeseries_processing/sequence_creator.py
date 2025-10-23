@@ -23,19 +23,23 @@ class SequenceCreator:
         organized_features = []
         group_info = {}
         current_idx = 0
-        
+
         print("=== Feature Spatial Organization for ConvLSTM ===")
-        
+
         for group_name, features in self.feature_groups.items():
+            # targetグループはスキップ（get_all_features_from_groupsと同じロジック）
+            if group_name == 'target':
+                continue
+
             group_features = []
             start_idx = current_idx
-            
+
             for feature in features:
                 if feature in feature_cols:
                     organized_features.append(feature)
                     group_features.append(feature)
                     current_idx += 1
-            
+
             if group_features:
                 group_info[group_name] = {
                     'features': group_features,
@@ -44,10 +48,10 @@ class SequenceCreator:
                     'size': len(group_features)
                 }
                 print(f"{group_name.capitalize()} group: {group_features} (indices {start_idx}-{current_idx-1})")
-        
+
         print(f"Total organized features: {len(organized_features)}")
         print(f"Spatial arrangement: {organized_features}")
-        
+
         return organized_features, group_info
     
     def create_stop_aware_sequences(self, data, target_col=None, feature_cols=None,

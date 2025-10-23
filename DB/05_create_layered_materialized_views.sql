@@ -50,6 +50,7 @@ WITH latest_updates AS (
         ON fm.id = fh.feed_message_id
     WHERE stu.arrival_delay BETWEEN -3600 AND 3600  -- Filter obvious outliers early
       AND stu.arrival_time IS NOT NULL
+      AND to_timestamp(fh.timestamp_seconds) >= CURRENT_TIMESTAMP - INTERVAL '24 hours'  -- ← 24時間制限
 )
 SELECT
     id,

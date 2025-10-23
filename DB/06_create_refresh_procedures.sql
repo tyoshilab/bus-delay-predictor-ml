@@ -7,13 +7,12 @@
 -- =====================================================
 
 -- =====================================================
--- PROCEDURE 1: Full Refresh (All Layers)
+-- PROCEDURE 1: Based View Refresh
 -- =====================================================
--- Use: Initial setup or major data changes
--- Duration: 5-15 minutes depending on data volume
+-- Use: Refresh base GTFS Realtime MV
 -- =====================================================
 
-CREATE OR REPLACE PROCEDURE gtfs_realtime.refresh_gtfs_views_full()
+CREATE OR REPLACE PROCEDURE gtfs_realtime.refresh_gtfs_views_staged()
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -21,29 +20,19 @@ DECLARE
     end_time TIMESTAMPTZ;
     duration NUMERIC;
     row_cnt BIGINT;
-    old_work_mem TEXT;
-    old_maintenance_work_mem TEXT;
 BEGIN
-    RAISE NOTICE 'Starting optimized full refresh at %', NOW();
-    
-    -- 現在の設定を保存
-    SELECT setting INTO old_work_mem FROM pg_settings WHERE name = 'work_mem';
-    SELECT setting INTO old_maintenance_work_mem FROM pg_settings WHERE name = 'maintenance_work_mem';
-    
-    -- リフレッシュ用に一時的にメモリを増やす
-    SET work_mem = '512MB';
-    SET maintenance_work_mem = '1GB';
-    
-    -- Layer 1: Base MV
+    RAISE NOTICE 'Starting staged refresh at %', NOW();
+
+    -- Refresh Base MV
     start_time := clock_timestamp();
     UPDATE gtfs_realtime.mv_refresh_log
     SET status = 'in_progress', updated_at = NOW()
     WHERE view_name = 'gtfs_rt_base_mv';
 
     BEGIN
-        ANALYZE gtfs_realtime.gtfs_rt_stop_time_updates;
-        
+        SET work_mem = '128MB';
         REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_base_mv;
+        RESET work_mem;
         GET DIAGNOSTICS row_cnt = ROW_COUNT;
         end_time := clock_timestamp();
         duration := EXTRACT(EPOCH FROM (end_time - start_time));
@@ -52,345 +41,20 @@ BEGIN
         SET last_refresh_time = end_time,
             refresh_duration_seconds = duration,
             rows_affected = row_cnt,
-            status = 'success',
-            error_message = NULL,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_base_mv';
-
-        RAISE NOTICE 'Base MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-    EXCEPTION WHEN OTHERS THEN
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'failed',
-            error_message = SQLERRM,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_base_mv';
-        -- 設定を元に戻す
-        EXECUTE format('SET work_mem = %L', old_work_mem);
-        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
-        RAISE;
-    END;
-
-    -- Layer 2: Enriched MV
-    start_time := clock_timestamp();
-    UPDATE gtfs_realtime.mv_refresh_log
-    SET status = 'in_progress', updated_at = NOW()
-    WHERE view_name = 'gtfs_rt_enriched_mv';
-
-    BEGIN
-        REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_enriched_mv;
-        GET DIAGNOSTICS row_cnt = ROW_COUNT;
-        end_time := clock_timestamp();
-        duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET last_refresh_time = end_time,
-            refresh_duration_seconds = duration,
-            rows_affected = row_cnt,
-            status = 'success',
-            error_message = NULL,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_enriched_mv';
-
-        RAISE NOTICE 'Enriched MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-    EXCEPTION WHEN OTHERS THEN
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'failed',
-            error_message = SQLERRM,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_enriched_mv';
-        EXECUTE format('SET work_mem = %L', old_work_mem);
-        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
-        RAISE;
-    END;
-
-    -- Layer 3: Analytics MV
-    start_time := clock_timestamp();
-    UPDATE gtfs_realtime.mv_refresh_log
-    SET status = 'in_progress', updated_at = NOW()
-    WHERE view_name = 'gtfs_rt_analytics_mv';
-
-    BEGIN
-        REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_analytics_mv;
-        GET DIAGNOSTICS row_cnt = ROW_COUNT;
-        end_time := clock_timestamp();
-        duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET last_refresh_time = end_time,
-            refresh_duration_seconds = duration,
-            rows_affected = row_cnt,
-            status = 'success',
-            error_message = NULL,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_analytics_mv';
-
-        RAISE NOTICE 'Analytics MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-    EXCEPTION WHEN OTHERS THEN
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'failed',
-            error_message = SQLERRM,
-            updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_analytics_mv';
-        EXECUTE format('SET work_mem = %L', old_work_mem);
-        EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
-        RAISE;
-    END;
-
-    -- 設定を元に戻す
-    EXECUTE format('SET work_mem = %L', old_work_mem);
-    EXECUTE format('SET maintenance_work_mem = %L', old_maintenance_work_mem);
-
-    -- Update statistics
-    ANALYZE gtfs_realtime.gtfs_rt_base_mv;
-    ANALYZE gtfs_realtime.gtfs_rt_enriched_mv;
-    ANALYZE gtfs_realtime.gtfs_rt_analytics_mv;
-
-    RAISE NOTICE 'Optimized full refresh completed successfully at %', NOW();
-END;
-$$;
-
--- =====================================================
--- PROCEDURE 2: Concurrent Refresh (Base Layer Only)
--- =====================================================
--- Use: Frequent updates without blocking queries
--- Duration: 2-5 minutes
--- Requires: UNIQUE index on base MV
--- =====================================================
-
-CREATE OR REPLACE PROCEDURE gtfs_realtime.refresh_gtfs_views_base_concurrent()
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    start_time TIMESTAMPTZ;
-    end_time TIMESTAMPTZ;
-    duration NUMERIC;
-BEGIN
-    RAISE NOTICE 'Starting concurrent refresh of base MV at %', NOW();
-
-    start_time := clock_timestamp();
-    UPDATE gtfs_realtime.mv_refresh_log
-    SET status = 'in_progress', updated_at = NOW()
-    WHERE view_name = 'gtfs_rt_base_mv';
-
-    BEGIN
-        -- CONCURRENTLY allows queries to continue while refreshing
-        REFRESH MATERIALIZED VIEW CONCURRENTLY gtfs_realtime.gtfs_rt_base_mv;
-
-        end_time := clock_timestamp();
-        duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET last_refresh_time = end_time,
-            refresh_duration_seconds = duration,
             status = 'success',
             error_message = NULL,
             updated_at = NOW()
         WHERE view_name = 'gtfs_rt_base_mv';
 
         ANALYZE gtfs_realtime.gtfs_rt_base_mv;
-
-        RAISE NOTICE 'Base MV concurrent refresh completed in % seconds', ROUND(duration, 2);
+        RAISE NOTICE 'Base MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
     EXCEPTION WHEN OTHERS THEN
         UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'failed',
-            error_message = SQLERRM,
-            updated_at = NOW()
+        SET status = 'failed', error_message = SQLERRM, updated_at = NOW()
         WHERE view_name = 'gtfs_rt_base_mv';
         RAISE;
     END;
-END;
-$$;
-
--- =====================================================
--- PROCEDURE 3: Staged Refresh (Flexible)
--- =====================================================
--- Use: Refresh specific layer(s) based on needs
--- Duration: Varies by layer
--- =====================================================
-
-CREATE OR REPLACE PROCEDURE gtfs_realtime.refresh_gtfs_views_staged(
-    refresh_level TEXT DEFAULT 'all'  -- 'base', 'enriched', 'analytics', 'all'
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    start_time TIMESTAMPTZ;
-    end_time TIMESTAMPTZ;
-    duration NUMERIC;
-    row_cnt BIGINT;
-BEGIN
-    RAISE NOTICE 'Starting staged refresh (level: %) at %', refresh_level, NOW();
-
-    -- Validate input
-    IF refresh_level NOT IN ('base', 'enriched', 'analytics', 'all') THEN
-        RAISE EXCEPTION 'Invalid refresh_level: %. Must be one of: base, enriched, analytics, all', refresh_level;
-    END IF;
-
-    -- Refresh Base MV
-    IF refresh_level IN ('base', 'all') THEN
-        start_time := clock_timestamp();
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'in_progress', updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_base_mv';
-
-        BEGIN
-            REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_base_mv;
-            GET DIAGNOSTICS row_cnt = ROW_COUNT;
-            end_time := clock_timestamp();
-            duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET last_refresh_time = end_time,
-                refresh_duration_seconds = duration,
-                rows_affected = row_cnt,
-                status = 'success',
-                error_message = NULL,
-                updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_base_mv';
-
-            ANALYZE gtfs_realtime.gtfs_rt_base_mv;
-            RAISE NOTICE 'Base MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-        EXCEPTION WHEN OTHERS THEN
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET status = 'failed', error_message = SQLERRM, updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_base_mv';
-            RAISE;
-        END;
-    END IF;
-
-    -- Refresh Enriched MV
-    IF refresh_level IN ('enriched', 'all') THEN
-        start_time := clock_timestamp();
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'in_progress', updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_enriched_mv';
-
-        BEGIN
-            REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_enriched_mv;
-            GET DIAGNOSTICS row_cnt = ROW_COUNT;
-            end_time := clock_timestamp();
-            duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET last_refresh_time = end_time,
-                refresh_duration_seconds = duration,
-                rows_affected = row_cnt,
-                status = 'success',
-                error_message = NULL,
-                updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_enriched_mv';
-
-            ANALYZE gtfs_realtime.gtfs_rt_enriched_mv;
-            RAISE NOTICE 'Enriched MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-        EXCEPTION WHEN OTHERS THEN
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET status = 'failed', error_message = SQLERRM, updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_enriched_mv';
-            RAISE;
-        END;
-    END IF;
-
-    -- Refresh Analytics MV
-    IF refresh_level IN ('analytics', 'all') THEN
-        start_time := clock_timestamp();
-        UPDATE gtfs_realtime.mv_refresh_log
-        SET status = 'in_progress', updated_at = NOW()
-        WHERE view_name = 'gtfs_rt_analytics_mv';
-
-        BEGIN
-            REFRESH MATERIALIZED VIEW gtfs_realtime.gtfs_rt_analytics_mv;
-            GET DIAGNOSTICS row_cnt = ROW_COUNT;
-            end_time := clock_timestamp();
-            duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET last_refresh_time = end_time,
-                refresh_duration_seconds = duration,
-                rows_affected = row_cnt,
-                status = 'success',
-                error_message = NULL,
-                updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_analytics_mv';
-
-            ANALYZE gtfs_realtime.gtfs_rt_analytics_mv;
-            RAISE NOTICE 'Analytics MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
-        EXCEPTION WHEN OTHERS THEN
-            UPDATE gtfs_realtime.mv_refresh_log
-            SET status = 'failed', error_message = SQLERRM, updated_at = NOW()
-            WHERE view_name = 'gtfs_rt_analytics_mv';
-            RAISE;
-        END;
-    END IF;
-
-    RAISE NOTICE 'Staged refresh (level: %) completed at %', refresh_level, NOW();
-END;
-$$;
-
--- =====================================================
--- PROCEDURE 4: Incremental Refresh (Advanced)
--- =====================================================
--- Use: Only refresh data added since last refresh
--- Duration: <1 minute for small updates
--- Note: Requires tracking of new data
--- =====================================================
-
-CREATE OR REPLACE PROCEDURE gtfs_realtime.refresh_gtfs_views_incremental(
-    lookback_hours INTEGER DEFAULT 24
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    start_time TIMESTAMPTZ;
-    end_time TIMESTAMPTZ;
-    duration NUMERIC;
-    affected_dates TEXT[];
-    last_refresh TIMESTAMPTZ;
-BEGIN
-    RAISE NOTICE 'Starting incremental refresh (lookback: % hours) at %', lookback_hours, NOW();
-
-    -- Get last successful refresh time
-    SELECT last_refresh_time INTO last_refresh
-    FROM gtfs_realtime.mv_refresh_log
-    WHERE view_name = 'gtfs_rt_analytics_mv'
-      AND status = 'success';
-
-    IF last_refresh IS NULL THEN
-        RAISE NOTICE 'No previous refresh found. Running full refresh instead.';
-        CALL gtfs_realtime.refresh_gtfs_views_full();
-        RETURN;
-    END IF;
-
-    start_time := clock_timestamp();
-
-    -- Find affected dates (dates with new or updated data)
-    SELECT ARRAY_AGG(DISTINCT td.start_date) INTO affected_dates
-    FROM gtfs_realtime.gtfs_rt_stop_time_updates stu
-    JOIN gtfs_realtime.gtfs_rt_trip_updates tu ON stu.trip_update_id = tu.trip_update_id
-    JOIN gtfs_realtime.gtfs_rt_trip_descriptors td ON tu.trip_descriptor_id = td.trip_descriptor_id
-    WHERE stu.created_at > last_refresh
-       OR stu.created_at > NOW() - INTERVAL '1 hour' * lookback_hours;
-
-    IF affected_dates IS NULL OR array_length(affected_dates, 1) = 0 THEN
-        RAISE NOTICE 'No new data found. Skipping refresh.';
-        RETURN;
-    END IF;
-
-    RAISE NOTICE 'Found % affected dates: %', array_length(affected_dates, 1), affected_dates;
-
-    -- For simplicity, do a full refresh if many dates are affected
-    IF array_length(affected_dates, 1) > 10 THEN
-        RAISE NOTICE 'Too many affected dates. Running full refresh instead.';
-        CALL gtfs_realtime.refresh_gtfs_views_full();
-        RETURN;
-    END IF;
-
-    -- Otherwise, just refresh the full MVs (true incremental requires more complex logic)
-    CALL gtfs_realtime.refresh_gtfs_views_staged('all');
-
-    end_time := clock_timestamp();
-    duration := EXTRACT(EPOCH FROM (end_time - start_time));
-
-    RAISE NOTICE 'Incremental refresh completed in % seconds', ROUND(duration, 2);
+    RAISE NOTICE 'Staged refresh completed at %', NOW();
 END;
 $$;
 
@@ -585,10 +249,6 @@ BEGIN
         CASE
             WHEN log.view_name = 'gtfs_rt_base_mv' THEN
                 pg_size_pretty(pg_total_relation_size('gtfs_realtime.gtfs_rt_base_mv'))
-            WHEN log.view_name = 'gtfs_rt_enriched_mv' THEN
-                pg_size_pretty(pg_total_relation_size('gtfs_realtime.gtfs_rt_enriched_mv'))
-            WHEN log.view_name = 'gtfs_rt_analytics_mv' THEN
-                pg_size_pretty(pg_total_relation_size('gtfs_realtime.gtfs_rt_analytics_mv'))
         END as size
     FROM gtfs_realtime.mv_refresh_log log
     ORDER BY log.view_name;
