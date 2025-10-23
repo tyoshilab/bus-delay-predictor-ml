@@ -27,10 +27,6 @@ class SequenceCreator:
         print("=== Feature Spatial Organization for ConvLSTM ===")
 
         for group_name, features in self.feature_groups.items():
-            # targetグループはスキップ（get_all_features_from_groupsと同じロジック）
-            if group_name == 'target':
-                continue
-
             group_features = []
             start_idx = current_idx
 

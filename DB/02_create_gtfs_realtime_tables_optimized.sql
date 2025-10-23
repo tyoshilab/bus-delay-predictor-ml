@@ -108,6 +108,9 @@ create table gtfs_rt_feed_headers (
 create unique index gtfs_rt_feed_headers_PKI
   on gtfs_rt_feed_headers(id);
 
+CREATE INDEX idx_rt_feed_order
+  ON gtfs_realtime.gtfs_rt_feed_headers (timestamp_seconds DESC);
+
 alter table gtfs_rt_feed_headers
   add constraint gtfs_rt_feed_headers_PKC primary key (id);
 
@@ -147,6 +150,9 @@ alter table gtfs_rt_stop_time_updates add constraint gtfs_rt_stop_time_updates_t
 
 create unique index gtfs_rt_stop_time_updates_PKI
   on gtfs_rt_stop_time_updates(id);
+
+CREATE INDEX idx_rt_trip_order
+  ON gtfs_realtime.gtfs_rt_stop_time_updates (trip_update_id, stop_sequence);
 
 alter table gtfs_rt_stop_time_updates
   add constraint gtfs_rt_stop_time_updates_PKC primary key (id);
