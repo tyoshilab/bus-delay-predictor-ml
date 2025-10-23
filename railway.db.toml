@@ -6,4 +6,4 @@ dockerfilePath = "Dockerfile.db"
 
 # Optional: Watch patterns to trigger deployments only when specific files change
 # Uncomment to enable conditional deployments (saves build time and costs)
-watchPatterns = ["Dockerfile.db", "db_entrypoint.sh", "DB/**"]
+watchPatterns = ["Dockerfile.db"]
