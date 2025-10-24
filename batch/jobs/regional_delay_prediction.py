@@ -247,12 +247,13 @@ class RegionalDelayPredictionJob(DataProcessingJob):
 
             route_id = parts[0]
             direction_id = int(parts[1])
-            stop_id = '_'.join(parts[2:])  # stop_idにアンダースコアが含まれる可能性を考慮
+            stop_id = parts[2]
+            stop_sequence = int(parts[3])
 
             # バス停情報取得
-            stop_info = stop_cache.get(f"{route_id}_{direction_id}_{stop_id}")
+            stop_info = stop_cache.get(f"{route_id}_{direction_id}_{stop_id}_{stop_sequence}")
             if not stop_info:
-                self.logger.warning(f"Stop info not found for key: {route_id}_{direction_id}_{stop_id}")
+                self.logger.warning(f"Stop info not found for key: {route_id}_{direction_id}_{stop_id}_{stop_sequence}")
                 continue
 
             # 各時間オフセットの予測（今の0分時点から開始）
@@ -280,6 +281,7 @@ class RegionalDelayPredictionJob(DataProcessingJob):
                         'stop_name': stop_info.get('stop_name'),
                         'stop_lat': stop_info.get('stop_lat'),
                         'stop_lon': stop_info.get('stop_lon'),
+                        'stop_sequence': stop_info.get('stop_sequence'),
                         'prediction_created_at': prediction_created_at,
                         'prediction_target_time': prediction_target_time,
                         'prediction_hour_offset': hour_offset,
@@ -298,14 +300,15 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         """バス停情報のキャッシュ構築（バス停ごと）"""
         cache = {}
         grouped = data.sort_values('time_bucket', ascending=False).groupby(
-            ['route_id', 'direction_id', 'stop_id'], as_index=False
+            ['route_id', 'direction_id', 'stop_id', 'line_direction_link_order'], as_index=False
         ).first()
 
         for _, row in grouped.iterrows():
-            cache_key = f"{row['route_id']}_{row['direction_id']}_{row['stop_id']}"
+            cache_key = f"{row['route_id']}_{row['direction_id']}_{row['stop_id']}_{row['line_direction_link_order']}"
             cache[cache_key] = {
                 'stop_id': str(row.get('stop_id', 'unknown')),
                 'stop_name': row.get('stop_name'),
+                'stop_sequence': row.get('line_direction_link_order'),
                 'stop_lat': float(row['stop_lat']) if pd.notna(row.get('stop_lat')) else None,
                 'stop_lon': float(row['stop_lon']) if pd.notna(row.get('stop_lon')) else None
             }
