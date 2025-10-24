@@ -239,7 +239,7 @@ class RegionalDelayPredictionJob(DataProcessingJob):
 
         results = []
         for idx, rds_key in enumerate(metadata):
-            # route_id, direction_id, stop_idをパース
+            # route_id, direction_id, stop_idをパース (format: route_id_direction_id_stop_id)
             parts = rds_key.split('_')
             if len(parts) < 3:
                 self.logger.warning(f"Invalid metadata key format: {rds_key}")
@@ -248,13 +248,19 @@ class RegionalDelayPredictionJob(DataProcessingJob):
             route_id = parts[0]
             direction_id = int(parts[1])
             stop_id = parts[2]
-            stop_sequence = int(parts[3])
 
-            # バス停情報取得
-            stop_info = stop_cache.get(f"{route_id}_{direction_id}_{stop_id}_{stop_sequence}")
-            if not stop_info:
-                self.logger.warning(f"Stop info not found for key: {route_id}_{direction_id}_{stop_id}_{stop_sequence}")
+            # 該当するバス停情報を検索（キャッシュから全候補を探す）
+            # キャッシュキーは route_id_direction_id_stop_id_stop_sequence の4パート形式
+            matching_stops = {k: v for k, v in stop_cache.items() if k.startswith(rds_key + '_')}
+
+            if not matching_stops:
+                self.logger.warning(f"Stop info not found for key: {rds_key}")
                 continue
+
+            # 複数のstop_sequenceが存在する可能性があるので、最初のものを使用
+            # (通常は1つのはず)
+            cache_key = list(matching_stops.keys())[0]
+            stop_info = matching_stops[cache_key]
 
             # 各時間オフセットの予測（今の0分時点から開始）
             for hour_offset in range(1, self.output_timesteps + 1):
