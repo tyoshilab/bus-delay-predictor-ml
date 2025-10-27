@@ -1,4 +1,3 @@
--- Active: 1753748166894@@c4qfhpigiuidv8.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com@5432@ddon0l69vpfbr8
 -- =============================================================================
 -- Enhanced Stops Materialized View with Geographic Features
 -- =============================================================================
@@ -9,8 +8,6 @@
 --   - Relative coordinates from downtown
 -- Refresh: Should be refreshed when gtfs_stops data changes (infrequent)
 -- =============================================================================
-
-DROP MATERIALIZED VIEW IF EXISTS gtfs_static.gtfs_stops_enhanced_mv CASCADE;
 
 CREATE MATERIALIZED VIEW gtfs_static.gtfs_stops_enhanced_mv AS
 SELECT
@@ -62,33 +59,26 @@ SELECT
     END AS area_density_score
 FROM gtfs_static.gtfs_stops s
 LEFT JOIN gtfs_static.regions r
-    ON public.ST_Contains(r.boundary, public.ST_SetSRID(public.ST_MakePoint(s.stop_lon::DOUBLE PRECISION, s.stop_lat::DOUBLE PRECISION), 4326));
+    ON ST_Contains(r.boundary, ST_SetSRID(ST_MakePoint(s.stop_lon::DOUBLE PRECISION, s.stop_lat::DOUBLE PRECISION), 4326));
 
 -- =============================================================================
 -- Indexes for Enhanced Stops MV
 -- =============================================================================
 
 -- Primary lookup index
-CREATE UNIQUE INDEX idx_stops_enhanced_stop_id 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stops_enhanced_stop_id
 ON gtfs_static.gtfs_stops_enhanced_mv (stop_id);
 
 -- Geographic search indexes
-CREATE INDEX idx_stops_enhanced_location 
-ON gtfs_static.gtfs_stops_enhanced_mv (stop_lat, stop_lon);
-
-CREATE INDEX idx_stops_enhanced_distance 
+CREATE INDEX IF NOT EXISTS idx_stops_enhanced_distance
 ON gtfs_static.gtfs_stops_enhanced_mv (distance_from_downtown_km);
 
 -- Region index
-CREATE INDEX idx_stops_enhanced_region_id
+CREATE INDEX IF NOT EXISTS idx_stops_enhanced_region_id
 ON gtfs_static.gtfs_stops_enhanced_mv (region_id);
 
 -- Common join patterns
-CREATE INDEX idx_stops_enhanced_stop_code
-ON gtfs_static.gtfs_stops_enhanced_mv (stop_code)
-WHERE stop_code IS NOT NULL;
-
-CREATE INDEX idx_stops_enhanced_stop_name
+CREATE INDEX IF NOT EXISTS idx_stops_enhanced_stop_name
 ON gtfs_static.gtfs_stops_enhanced_mv (stop_name);
 
 -- =============================================================================

@@ -9,9 +9,10 @@
 -- to improve bulk insert performance during --all-timestamps operations.
 -- Uncomment indexes after bulk data loading is complete.
 
-drop table if exists gtfs_rt_alert_text cascade;
+create schema if not exists gtfs_realtime;
+SET search_path TO gtfs_realtime, public;
 
-create table gtfs_rt_alert_text (
+create table if not exists gtfs_rt_alert_text (
   alert_url_id serial not null
   , alert_id integer not null
   , text_type text not null
@@ -19,29 +20,25 @@ create table gtfs_rt_alert_text (
   , language text
 ) ;
 
-create unique index gtfs_rt_alert_text_PKI
+create unique index if not exists gtfs_rt_alert_text_PKI
   on gtfs_rt_alert_text(alert_url_id);
 
 alter table gtfs_rt_alert_text
   add constraint gtfs_rt_alert_text_PKC primary key (alert_url_id);
 
-drop table if exists gtfs_rt_alert_active_periods cascade;
-
-create table gtfs_rt_alert_active_periods (
+create table if not exists gtfs_rt_alert_active_periods (
   alert_period_id serial not null
   , alert_id integer not null
   , period_time bigint
 ) ;
 
-create unique index gtfs_rt_alert_active_periods_PKI
+create unique index if not exists gtfs_rt_alert_active_periods_PKI
   on gtfs_rt_alert_active_periods(alert_period_id);
 
 alter table gtfs_rt_alert_active_periods
   add constraint gtfs_rt_alert_active_periods_PKC primary key (alert_period_id);
 
-drop table if exists gtfs_rt_alert_informed_entities cascade;
-
-create table gtfs_rt_alert_informed_entities (
+create table if not exists gtfs_rt_alert_informed_entities (
   alert_informed_id serial not null
   , alert_id integer not null
   , agency_id text
@@ -50,15 +47,13 @@ create table gtfs_rt_alert_informed_entities (
   , stop_id text
 ) ;
 
-create unique index gtfs_rt_alert_informed_entities_PKI
+create unique index if not exists gtfs_rt_alert_informed_entities_PKI
   on gtfs_rt_alert_informed_entities(alert_informed_id);
 
 alter table gtfs_rt_alert_informed_entities
   add constraint gtfs_rt_alert_informed_entities_PKC primary key (alert_informed_id);
 
-drop table if exists gtfs_rt_alerts cascade;
-
-create table gtfs_rt_alerts (
+create table if not exists gtfs_rt_alerts (
   alert_id serial not null
   , feed_entity_id integer not null
   , cause text not null
@@ -67,15 +62,13 @@ create table gtfs_rt_alerts (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create unique index gtfs_rt_alerts_PKI
+create unique index if not exists gtfs_rt_alerts_PKI
   on gtfs_rt_alerts(alert_id);
 
 alter table gtfs_rt_alerts
   add constraint gtfs_rt_alerts_PKC primary key (alert_id);
 
-drop table if exists gtfs_rt_feed_entities cascade;
-
-create table gtfs_rt_feed_entities (
+create table if not exists gtfs_rt_feed_entities (
   id serial not null
   , feed_message_id integer not null
   , entity_id text not null
@@ -87,15 +80,13 @@ create table gtfs_rt_feed_entities (
 alter table gtfs_rt_feed_entities add constraint gtfs_rt_feed_entities_feed_message_id_entity_id_key
   unique (feed_message_id,entity_id) ;
 
-create unique index gtfs_rt_feed_entities_PKI
+create unique index if not exists gtfs_rt_feed_entities_PKI
   on gtfs_rt_feed_entities(id);
 
 alter table gtfs_rt_feed_entities
   add constraint gtfs_rt_feed_entities_PKC primary key (id);
 
-drop table if exists gtfs_rt_feed_headers cascade;
-
-create table gtfs_rt_feed_headers (
+create table if not exists gtfs_rt_feed_headers (
   id serial not null
   , feed_message_id integer not null
   , gtfs_realtime_version text default '2.0' not null
@@ -105,18 +96,16 @@ create table gtfs_rt_feed_headers (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create unique index gtfs_rt_feed_headers_PKI
+create unique index if not exists gtfs_rt_feed_headers_PKI
   on gtfs_rt_feed_headers(id);
 
-CREATE INDEX idx_rt_feed_order
+CREATE INDEX IF NOT EXISTS idx_rt_feed_order
   ON gtfs_realtime.gtfs_rt_feed_headers (timestamp_seconds DESC);
 
 alter table gtfs_rt_feed_headers
   add constraint gtfs_rt_feed_headers_PKC primary key (id);
 
-drop table if exists gtfs_rt_feed_messages cascade;
-
-create table gtfs_rt_feed_messages (
+create table if not exists gtfs_rt_feed_messages (
   id serial not null
   , feed_type text not null
   , created_at timestamp(6) with time zone default now()
@@ -124,15 +113,13 @@ create table gtfs_rt_feed_messages (
   , processed_at timestamp(6) with time zone
 ) ;
 
-create unique index gtfs_rt_feed_messages_PKI
+create unique index if not exists gtfs_rt_feed_messages_PKI
   on gtfs_rt_feed_messages(id);
 
 alter table gtfs_rt_feed_messages
   add constraint gtfs_rt_feed_messages_PKC primary key (id);
 
-drop table if exists gtfs_rt_stop_time_updates cascade;
-
-create table gtfs_rt_stop_time_updates (
+create table if not exists gtfs_rt_stop_time_updates (
   id serial not null
   , trip_update_id integer not null
   , stop_sequence integer not null
@@ -148,18 +135,16 @@ create table gtfs_rt_stop_time_updates (
 alter table gtfs_rt_stop_time_updates add constraint gtfs_rt_stop_time_updates_trip_update_id_stop_sequence_key
   unique (trip_update_id,stop_sequence) ;
 
-create unique index gtfs_rt_stop_time_updates_PKI
+create unique index if not exists gtfs_rt_stop_time_updates_PKI
   on gtfs_rt_stop_time_updates(id);
 
-CREATE INDEX idx_rt_trip_order
+CREATE INDEX IF NOT EXISTS idx_rt_trip_order
   ON gtfs_realtime.gtfs_rt_stop_time_updates (trip_update_id, stop_sequence);
 
 alter table gtfs_rt_stop_time_updates
   add constraint gtfs_rt_stop_time_updates_PKC primary key (id);
 
-drop table if exists gtfs_rt_trip_descriptors cascade;
-
-create table gtfs_rt_trip_descriptors (
+create table if not exists gtfs_rt_trip_descriptors (
   trip_descriptor_id serial not null
   , trip_id text not null
   , start_date text not null
@@ -172,15 +157,13 @@ create table gtfs_rt_trip_descriptors (
 alter table gtfs_rt_trip_descriptors add constraint gtfs_rt_trip_descriptors_trip_id_route_id_direction_id_star_key
   unique (trip_id,route_id,direction_id,start_date) ;
 
-create unique index gtfs_rt_trip_descriptors_PKI
+create unique index if not exists gtfs_rt_trip_descriptors_PKI
   on gtfs_rt_trip_descriptors(trip_descriptor_id);
 
 alter table gtfs_rt_trip_descriptors
   add constraint gtfs_rt_trip_descriptors_PKC primary key (trip_descriptor_id);
 
-drop table if exists gtfs_rt_trip_updates cascade;
-
-create table gtfs_rt_trip_updates (
+create table if not exists gtfs_rt_trip_updates (
   trip_update_id serial not null
   , feed_entity_id integer not null
   , trip_descriptor_id integer not null
@@ -188,15 +171,13 @@ create table gtfs_rt_trip_updates (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create unique index gtfs_rt_trip_updates_PKI
+create unique index if not exists gtfs_rt_trip_updates_PKI
   on gtfs_rt_trip_updates(trip_update_id);
 
 alter table gtfs_rt_trip_updates
   add constraint gtfs_rt_trip_updates_PKC primary key (trip_update_id);
 
-drop table if exists gtfs_rt_vehicle_descriptors cascade;
-
-create table gtfs_rt_vehicle_descriptors (
+create table if not exists gtfs_rt_vehicle_descriptors (
   vehicle_descriptor_id serial not null
   , vehicle_id text not null
   , label text not null
@@ -206,15 +187,13 @@ create table gtfs_rt_vehicle_descriptors (
 alter table gtfs_rt_vehicle_descriptors add constraint gtfs_rt_vehicle_descriptors_vehicle_id_label_key
   unique (vehicle_id,label) ;
 
-create unique index gtfs_rt_vehicle_descriptors_PKI
+create unique index if not exists gtfs_rt_vehicle_descriptors_PKI
   on gtfs_rt_vehicle_descriptors(vehicle_descriptor_id);
 
 alter table gtfs_rt_vehicle_descriptors
   add constraint gtfs_rt_vehicle_descriptors_PKC primary key (vehicle_descriptor_id);
 
-drop table if exists gtfs_rt_vehicle_positions cascade;
-
-create table gtfs_rt_vehicle_positions (
+create table if not exists gtfs_rt_vehicle_positions (
   id serial not null
   , feed_entity_id integer not null
   , trip_descriptor_id integer not null
@@ -228,7 +207,7 @@ create table gtfs_rt_vehicle_positions (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create unique index gtfs_rt_vehicle_positions_PKI
+create unique index if not exists gtfs_rt_vehicle_positions_PKI
   on gtfs_rt_vehicle_positions(id);
 
 alter table gtfs_rt_vehicle_positions
@@ -372,3 +351,4 @@ comment on column gtfs_rt_vehicle_positions.stop_id is 'stop_id';
 comment on column gtfs_rt_vehicle_positions.vehicle_descriptor_id is 'vehicle_descriptor_id';
 comment on column gtfs_rt_vehicle_positions.created_at is 'created_at';
 
+RESET search_path;

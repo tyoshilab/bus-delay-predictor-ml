@@ -1,4 +1,3 @@
--- Active: 1753898812903@@127.0.0.1@5432@mypage
 -- Climate Data Tables
 -- Schema: climate - Contains weather and climate data for Vancouver
 -- Data source: Environment and Climate Change Canada weather station data
@@ -35,17 +34,8 @@ ADD CONSTRAINT uk_weather_hourly_datetime
 UNIQUE (date_time_local);
 
 -- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_weather_hourly_datetime_local 
-ON weather_hourly(date_time_local);
-
-CREATE INDEX IF NOT EXISTS idx_weather_hourly_datetime_utc 
-ON weather_hourly(datetime_utc);
-
-CREATE INDEX IF NOT EXISTS idx_weather_hourly_temperature 
-ON weather_hourly(temperature);
-
-CREATE INDEX IF NOT EXISTS idx_weather_hourly_date_range 
-ON weather_hourly(date_time_local, temperature);
+CREATE INDEX IF NOT EXISTS idx_weather_hourly_unixtime 
+ON weather_hourly(unixtime);
 
 -- Add comments for documentation
 COMMENT ON SCHEMA climate IS 'Climate and weather data for Vancouver region';

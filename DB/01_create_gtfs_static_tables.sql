@@ -4,9 +4,10 @@
 -- RDBMS Type   : PostgreSQL
 -- Application  : A5:SQL Mk-2
 
-drop table if exists gtfs_directions cascade;
+create schema if not exists gtfs_static;
+SET search_path TO gtfs_static, public;
 
-create table gtfs_directions (
+create table if not exists gtfs_directions (
   direction_id INTEGER
   , direction VARCHAR(100)
   , route_id VARCHAR(20)
@@ -14,15 +15,13 @@ create table gtfs_directions (
   , LineIdConst VARCHAR(20)
 ) ;
 
-create index idx_direction
+create index if not exists idx_direction
   on gtfs_directions(direction_id);
 
 alter table gtfs_directions
   add constraint gtfs_directions_PKC primary key (direction_id);
 
-drop table if exists gtfs_agency cascade;
-
-create table gtfs_agency (
+create table if not exists gtfs_agency (
   agency_id character varying(10) not null
   , agency_name character varying(100) not null
   , agency_url character varying(255)
@@ -31,15 +30,13 @@ create table gtfs_agency (
   , agency_fare_url character varying(255)
 ) ;
 
-create unique index gtfs_agency_PKI
+create unique index if not exists gtfs_agency_PKI
   on gtfs_agency(agency_id);
 
 alter table gtfs_agency
   add constraint gtfs_agency_PKC primary key (agency_id);
 
-drop table if exists gtfs_calendar cascade;
-
-create table gtfs_calendar (
+create table if not exists gtfs_calendar (
   service_id character varying(20) not null
   , monday integer not null
   , tuesday integer not null
@@ -52,29 +49,25 @@ create table gtfs_calendar (
   , end_date date not null
 ) ;
 
-create unique index gtfs_calendar_PKI
+create unique index if not exists gtfs_calendar_PKI
   on gtfs_calendar(service_id);
 
 alter table gtfs_calendar
   add constraint gtfs_calendar_PKC primary key (service_id);
 
-drop table if exists gtfs_calendar_dates cascade;
-
-create table gtfs_calendar_dates (
+create table if not exists gtfs_calendar_dates (
   service_id character varying(20) not null
   , date date not null
   , exception_type integer not null
 ) ;
 
-create unique index gtfs_calendar_dates_PKI
+create unique index if not exists gtfs_calendar_dates_PKI
   on gtfs_calendar_dates(service_id,date);
 
 alter table gtfs_calendar_dates
   add constraint gtfs_calendar_dates_PKC primary key (service_id,date);
 
-drop table if exists gtfs_feed_info cascade;
-
-create table gtfs_feed_info (
+create table if not exists gtfs_feed_info (
   feed_publisher_name character varying(100) not null
   , feed_publisher_url character varying(255) not null
   , feed_lang character varying(5) not null
@@ -83,9 +76,7 @@ create table gtfs_feed_info (
   , feed_version character varying(50)
 ) ;
 
-drop table if exists gtfs_routes cascade;
-
-create table gtfs_routes (
+create table if not exists gtfs_routes (
   route_id character varying(20) not null
   , agency_id character varying(10)
   , route_short_name character varying(50)
@@ -97,18 +88,16 @@ create table gtfs_routes (
   , route_text_color character varying(6)
 ) ;
 
-create index idx_routes_agency
+create index if not exists idx_routes_agency
   on gtfs_routes(agency_id);
 
-create unique index gtfs_routes_PKI
+create unique index if not exists gtfs_routes_PKI
   on gtfs_routes(route_id);
 
 alter table gtfs_routes
   add constraint gtfs_routes_PKC primary key (route_id);
 
-drop table if exists gtfs_shapes cascade;
-
-create table gtfs_shapes (
+create table if not exists gtfs_shapes (
   shape_id character varying(20) not null
   , shape_pt_lat numeric(10, 8) not null
   , shape_pt_lon numeric(11, 8) not null
@@ -116,15 +105,13 @@ create table gtfs_shapes (
   , shape_dist_traveled numeric(10, 4)
 ) ;
 
-create unique index gtfs_shapes_PKI
+create unique index if not exists gtfs_shapes_PKI
   on gtfs_shapes(shape_id,shape_pt_sequence);
 
 alter table gtfs_shapes
   add constraint gtfs_shapes_PKC primary key (shape_id,shape_pt_sequence);
 
-drop table if exists gtfs_stop_times cascade;
-
-create table gtfs_stop_times (
+create table if not exists gtfs_stop_times (
   trip_id character varying(20) not null
   , arrival_time time without time zone
   , departure_time time without time zone
@@ -137,21 +124,19 @@ create table gtfs_stop_times (
   , timepoint integer default 0
 ) ;
 
-create index idx_stop_times_stop
+create index if not exists idx_stop_times_stop
   on gtfs_stop_times(stop_id);
 
-create index idx_stop_times_trip
+create index if not exists idx_stop_times_trip
   on gtfs_stop_times(trip_id);
 
-create unique index gtfs_stop_times_PKI
+create unique index if not exists gtfs_stop_times_PKI
   on gtfs_stop_times(trip_id,stop_sequence);
 
 alter table gtfs_stop_times
   add constraint gtfs_stop_times_PKC primary key (trip_id,stop_sequence);
 
-drop table if exists gtfs_stops cascade;
-
-create table gtfs_stops (
+create table if not exists gtfs_stops (
   stop_id character varying(20) not null
   , stop_code character varying(20)
   , stop_name character varying(100) not null
@@ -165,18 +150,16 @@ create table gtfs_stops (
   , wheelchair_boarding integer default 0
 ) ;
 
-create index idx_stops_location
+create index if not exists idx_stops_location
   on gtfs_stops(stop_lat,stop_lon);
 
-create unique index gtfs_stops_PKI
+create unique index if not exists gtfs_stops_PKI
   on gtfs_stops(stop_id);
 
 alter table gtfs_stops
   add constraint gtfs_stops_PKC primary key (stop_id);
 
-drop table if exists gtfs_transfers cascade;
-
-create table gtfs_transfers (
+create table if not exists gtfs_transfers (
   from_stop_id character varying(20) not null
   , to_stop_id character varying(20) not null
   , transfer_type integer not null
@@ -185,15 +168,13 @@ create table gtfs_transfers (
   , to_trip_id character varying(20)
 ) ;
 
-create unique index gtfs_transfers_PKI
+create unique index if not exists gtfs_transfers_PKI
   on gtfs_transfers(from_stop_id,to_stop_id);
 
 alter table gtfs_transfers
   add constraint gtfs_transfers_PKC primary key (from_stop_id,to_stop_id);
 
-drop table if exists gtfs_trips_static cascade;
-
-create table gtfs_trips_static (
+create table if not exists gtfs_trips_static (
   trip_id character varying(20) not null
   , route_id character varying(20)
   , service_id character varying(20)
@@ -206,21 +187,19 @@ create table gtfs_trips_static (
   , bikes_allowed integer default 0
 ) ;
 
-create index idx_trips_route
+create index if not exists idx_trips_route
   on gtfs_trips_static(route_id);
 
-create index idx_trips_service
+create index if not exists idx_trips_service
   on gtfs_trips_static(service_id);
 
-create unique index gtfs_trips_static_PKI
+create unique index if not exists gtfs_trips_static_PKI
   on gtfs_trips_static(trip_id);
 
 alter table gtfs_trips_static
   add constraint gtfs_trips_static_PKC primary key (trip_id);
 
-drop table if exists gtfs_rt_alert_text cascade;
-
-create table gtfs_rt_alert_text (
+create table if not exists gtfs_rt_alert_text (
   alert_url_id serial not null
   , alert_id integer not null
   , text_type text not null
@@ -228,29 +207,25 @@ create table gtfs_rt_alert_text (
   , language text
 ) ;
 
-create unique index gtfs_rt_alert_text_PKI
+create unique index if not exists gtfs_rt_alert_text_PKI
   on gtfs_rt_alert_text(alert_url_id);
 
 alter table gtfs_rt_alert_text
   add constraint gtfs_rt_alert_text_PKC primary key (alert_url_id);
 
-drop table if exists gtfs_rt_alert_active_periods cascade;
-
-create table gtfs_rt_alert_active_periods (
+create table if not exists gtfs_rt_alert_active_periods (
   alert_period_id serial not null
   , alert_id integer not null
   , period_time bigint
 ) ;
 
-create unique index gtfs_rt_alert_active_periods_PKI
+create unique index if not exists gtfs_rt_alert_active_periods_PKI
   on gtfs_rt_alert_active_periods(alert_period_id);
 
 alter table gtfs_rt_alert_active_periods
   add constraint gtfs_rt_alert_active_periods_PKC primary key (alert_period_id);
 
-drop table if exists gtfs_rt_alert_informed_entities cascade;
-
-create table gtfs_rt_alert_informed_entities (
+create table if not exists gtfs_rt_alert_informed_entities (
   alert_informed_id serial not null
   , alert_id integer not null
   , agency_id text
@@ -259,15 +234,13 @@ create table gtfs_rt_alert_informed_entities (
   , stop_id text
 ) ;
 
-create unique index gtfs_rt_alert_informed_entities_PKI
+create unique index if not exists gtfs_rt_alert_informed_entities_PKI
   on gtfs_rt_alert_informed_entities(alert_informed_id);
 
 alter table gtfs_rt_alert_informed_entities
   add constraint gtfs_rt_alert_informed_entities_PKC primary key (alert_informed_id);
 
-drop table if exists gtfs_rt_alerts cascade;
-
-create table gtfs_rt_alerts (
+create table if not exists gtfs_rt_alerts (
   alert_id serial not null
   , feed_entity_id integer not null
   , cause text not null
@@ -276,24 +249,22 @@ create table gtfs_rt_alerts (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create index idx_alerts_cause_effect
+create index if not exists idx_alerts_cause_effect
   on gtfs_rt_alerts(cause,effect);
 
-create index idx_alerts_feed_entity
+create index if not exists idx_alerts_feed_entity
   on gtfs_rt_alerts(feed_entity_id);
 
-create index idx_rt_alerts_created_at
+create index if not exists idx_rt_alerts_created_at
   on gtfs_rt_alerts(created_at);
 
-create unique index gtfs_rt_alerts_PKI
+create unique index if not exists gtfs_rt_alerts_PKI
   on gtfs_rt_alerts(alert_id);
 
 alter table gtfs_rt_alerts
   add constraint gtfs_rt_alerts_PKC primary key (alert_id);
 
-drop table if exists gtfs_rt_feed_entities cascade;
-
-create table gtfs_rt_feed_entities (
+create table if not exists gtfs_rt_feed_entities (
   id serial not null
   , feed_message_id integer not null
   , entity_id text not null
@@ -305,21 +276,19 @@ create table gtfs_rt_feed_entities (
 alter table gtfs_rt_feed_entities add constraint gtfs_rt_feed_entities_feed_message_id_entity_id_key
   unique (feed_message_id,entity_id) ;
 
-create index idx_feed_entities_entity_id
+create index if not exists idx_feed_entities_entity_id
   on gtfs_rt_feed_entities(entity_id);
 
-create index idx_feed_entities_message_type
+create index if not exists idx_feed_entities_message_type
   on gtfs_rt_feed_entities(feed_message_id,entity_type);
 
-create unique index gtfs_rt_feed_entities_PKI
+create unique index if not exists gtfs_rt_feed_entities_PKI
   on gtfs_rt_feed_entities(id);
 
 alter table gtfs_rt_feed_entities
   add constraint gtfs_rt_feed_entities_PKC primary key (id);
 
-drop table if exists gtfs_rt_feed_headers cascade;
-
-create table gtfs_rt_feed_headers (
+create table if not exists gtfs_rt_feed_headers (
   id serial not null
   , feed_message_id integer not null
   , gtfs_realtime_version text default '2.0' not null
@@ -329,18 +298,16 @@ create table gtfs_rt_feed_headers (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create index idx_feed_headers_timestamp
+create index if not exists idx_feed_headers_timestamp
   on gtfs_rt_feed_headers(timestamp_seconds);
 
-create unique index gtfs_rt_feed_headers_PKI
+create unique index if not exists gtfs_rt_feed_headers_PKI
   on gtfs_rt_feed_headers(id);
 
 alter table gtfs_rt_feed_headers
   add constraint gtfs_rt_feed_headers_PKC primary key (id);
 
-drop table if exists gtfs_rt_feed_messages cascade;
-
-create table gtfs_rt_feed_messages (
+create table if not exists gtfs_rt_feed_messages (
   id serial not null
   , feed_type text not null
   , created_at timestamp(6) with time zone default now()
@@ -348,18 +315,16 @@ create table gtfs_rt_feed_messages (
   , processed_at timestamp(6) with time zone
 ) ;
 
-create index idx_feed_messages_type_created
+create index if not exists idx_feed_messages_type_created
   on gtfs_rt_feed_messages(feed_type,created_at);
 
-create unique index gtfs_rt_feed_messages_PKI
+create unique index if not exists gtfs_rt_feed_messages_PKI
   on gtfs_rt_feed_messages(id);
 
 alter table gtfs_rt_feed_messages
   add constraint gtfs_rt_feed_messages_PKC primary key (id);
 
-drop table if exists gtfs_rt_stop_time_updates cascade;
-
-create table gtfs_rt_stop_time_updates (
+create table if not exists gtfs_rt_stop_time_updates (
   id serial not null
   , trip_update_id integer not null
   , stop_sequence integer not null
@@ -375,18 +340,16 @@ create table gtfs_rt_stop_time_updates (
 alter table gtfs_rt_stop_time_updates add constraint gtfs_rt_stop_time_updates_trip_update_id_stop_sequence_key
   unique (trip_update_id,stop_sequence) ;
 
-create index idx_stop_time_updates_stop_id
+create index if not exists idx_stop_time_updates_stop_id
   on gtfs_rt_stop_time_updates(stop_id);
 
-create unique index gtfs_rt_stop_time_updates_PKI
+create unique index if not exists gtfs_rt_stop_time_updates_PKI
   on gtfs_rt_stop_time_updates(id);
 
 alter table gtfs_rt_stop_time_updates
   add constraint gtfs_rt_stop_time_updates_PKC primary key (id);
 
-drop table if exists gtfs_rt_trip_descriptors cascade;
-
-create table gtfs_rt_trip_descriptors (
+create table if not exists gtfs_rt_trip_descriptors (
   trip_descriptor_id serial not null
   , trip_id text not null
   , start_date text not null
@@ -399,21 +362,19 @@ create table gtfs_rt_trip_descriptors (
 alter table gtfs_rt_trip_descriptors add constraint gtfs_rt_trip_descriptors_trip_id_route_id_direction_id_star_key
   unique (trip_id,route_id,direction_id,start_date) ;
 
-create index idx_trip_descriptors_route_direction
+create index if not exists idx_trip_descriptors_route_direction
   on gtfs_rt_trip_descriptors(route_id,direction_id);
 
-create index idx_trip_descriptors_trip_route
+create index if not exists idx_trip_descriptors_trip_route
   on gtfs_rt_trip_descriptors(trip_id,route_id);
 
-create unique index gtfs_rt_trip_descriptors_PKI
+create unique index if not exists gtfs_rt_trip_descriptors_PKI
   on gtfs_rt_trip_descriptors(trip_descriptor_id);
 
 alter table gtfs_rt_trip_descriptors
   add constraint gtfs_rt_trip_descriptors_PKC primary key (trip_descriptor_id);
 
-drop table if exists gtfs_rt_trip_updates cascade;
-
-create table gtfs_rt_trip_updates (
+create table if not exists gtfs_rt_trip_updates (
   trip_update_id serial not null
   , feed_entity_id integer not null
   , trip_descriptor_id integer not null
@@ -421,21 +382,19 @@ create table gtfs_rt_trip_updates (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create index idx_rt_trip_updates_created_at
+create index if not exists idx_rt_trip_updates_created_at
   on gtfs_rt_trip_updates(created_at);
 
-create index idx_trip_updates_feed_entity
+create index if not exists idx_trip_updates_feed_entity
   on gtfs_rt_trip_updates(feed_entity_id);
 
-create unique index gtfs_rt_trip_updates_PKI
+create unique index if not exists gtfs_rt_trip_updates_PKI
   on gtfs_rt_trip_updates(trip_update_id);
 
 alter table gtfs_rt_trip_updates
   add constraint gtfs_rt_trip_updates_PKC primary key (trip_update_id);
 
-drop table if exists gtfs_rt_vehicle_descriptors cascade;
-
-create table gtfs_rt_vehicle_descriptors (
+create table if not exists gtfs_rt_vehicle_descriptors (
   vehicle_descriptor_id serial not null
   , vehicle_id text not null
   , label text not null
@@ -445,18 +404,16 @@ create table gtfs_rt_vehicle_descriptors (
 alter table gtfs_rt_vehicle_descriptors add constraint gtfs_rt_vehicle_descriptors_vehicle_id_label_key
   unique (vehicle_id,label) ;
 
-create index idx_vehicle_descriptors_vehicle_id
+create index if not exists idx_vehicle_descriptors_vehicle_id
   on gtfs_rt_vehicle_descriptors(vehicle_id);
 
-create unique index gtfs_rt_vehicle_descriptors_PKI
+create unique index if not exists gtfs_rt_vehicle_descriptors_PKI
   on gtfs_rt_vehicle_descriptors(vehicle_descriptor_id);
 
 alter table gtfs_rt_vehicle_descriptors
   add constraint gtfs_rt_vehicle_descriptors_PKC primary key (vehicle_descriptor_id);
 
-drop table if exists gtfs_rt_vehicle_positions cascade;
-
-create table gtfs_rt_vehicle_positions (
+create table if not exists gtfs_rt_vehicle_positions (
   id serial not null
   , feed_entity_id integer not null
   , trip_descriptor_id integer not null
@@ -470,28 +427,26 @@ create table gtfs_rt_vehicle_positions (
   , created_at timestamp(6) with time zone default now()
 ) ;
 
-create index idx_rt_vehicle_positions_created_at
+create index if not exists idx_rt_vehicle_positions_created_at
   on gtfs_rt_vehicle_positions(created_at);
 
-create index idx_vehicle_positions_feed_entity
+create index if not exists idx_vehicle_positions_feed_entity
   on gtfs_rt_vehicle_positions(feed_entity_id);
 
-create index idx_vehicle_positions_timestamp
+create index if not exists idx_vehicle_positions_timestamp
   on gtfs_rt_vehicle_positions(timestamp_seconds);
 
-create index idx_vehicle_positions_vehicle
+create index if not exists idx_vehicle_positions_vehicle
   on gtfs_rt_vehicle_positions(vehicle_descriptor_id);
 
-create unique index gtfs_rt_vehicle_positions_PKI
+create unique index if not exists gtfs_rt_vehicle_positions_PKI
   on gtfs_rt_vehicle_positions(id);
 
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- Create PostGIS extension in public schema
+CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public;
 
--- Drop existing table
-DROP TABLE IF EXISTS gtfs_static.regions CASCADE;
-
--- Create regions table
-CREATE TABLE gtfs_static.regions (
+-- Create regions table in gtfs_static schema
+CREATE TABLE IF NOT EXISTS gtfs_static.regions (
     region_id VARCHAR(50) PRIMARY KEY,
     region_name VARCHAR(100) NOT NULL,
     region_type VARCHAR(50),
@@ -505,9 +460,9 @@ CREATE TABLE gtfs_static.regions (
 );
 
 -- Create indexes
-CREATE INDEX idx_regions_boundary ON gtfs_static.regions USING GIST(boundary);
-CREATE INDEX idx_regions_name ON gtfs_static.regions(region_name);
-CREATE INDEX idx_regions_type ON gtfs_static.regions(region_type);
+CREATE INDEX IF NOT EXISTS idx_regions_boundary ON gtfs_static.regions USING GIST(boundary);
+CREATE INDEX IF NOT EXISTS idx_regions_name ON gtfs_static.regions(region_name);
+CREATE INDEX IF NOT EXISTS idx_regions_type ON gtfs_static.regions(region_type);
 
 alter table gtfs_rt_vehicle_positions
   add constraint gtfs_rt_vehicle_positions_PKC primary key (id);
@@ -577,3 +532,5 @@ alter table gtfs_rt_vehicle_positions
 
 alter table gtfs_rt_vehicle_positions
   add constraint gtfs_rt_vehicle_positions_FK3 foreign key (vehicle_descriptor_id) references gtfs_rt_vehicle_descriptors(vehicle_descriptor_id);
+
+RESET search_path;

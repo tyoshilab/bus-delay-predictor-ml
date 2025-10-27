@@ -15,16 +15,16 @@
 -- =====================================================
 -- 1. Regional Delay Predictions Table
 -- =====================================================
+DROP TABLE IF EXISTS gtfs_realtime.regional_delay_predictions;
 
-DROP TABLE IF EXISTS gtfs_realtime.regional_delay_predictions CASCADE;
-
-CREATE TABLE gtfs_realtime.regional_delay_predictions (
+CREATE TABLE IF NOT EXISTS gtfs_realtime.regional_delay_predictions (
     prediction_id BIGSERIAL PRIMARY KEY,
     -- メタデータ
     region_id VARCHAR(50) NOT NULL,
     route_id VARCHAR(20) NOT NULL,
     direction_id INTEGER NOT NULL,
     stop_id VARCHAR(20) NOT NULL,
+    stop_sequence INTEGER,
     -- 予測基準時刻
     prediction_created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- 予測対象時刻（1時間後、2時間後、3時間後）
@@ -60,28 +60,11 @@ CREATE TABLE gtfs_realtime.regional_delay_predictions (
 -- 2. Indexes for Performance
 -- =====================================================
 
--- 予測時刻での高速検索
-CREATE INDEX idx_regional_predictions_target_time
-    ON gtfs_realtime.regional_delay_predictions(prediction_target_time DESC);
-
--- 地域・ルート・方向での検索
-CREATE INDEX idx_regional_predictions_route
-    ON gtfs_realtime.regional_delay_predictions(region_id, route_id, direction_id);
-
--- 予測作成時刻での検索
-CREATE INDEX idx_regional_predictions_created_at
-    ON gtfs_realtime.regional_delay_predictions(prediction_created_at DESC);
-
--- バス停での検索
-CREATE INDEX idx_regional_predictions_stop
-    ON gtfs_realtime.regional_delay_predictions(stop_id, prediction_target_time DESC);
-
 -- 複合インデックス：最新予測取得用
-CREATE INDEX idx_regional_predictions_latest
+CREATE INDEX IF NOT EXISTS idx_regional_predictions_latest
     ON gtfs_realtime.regional_delay_predictions(
-        region_id,
-        prediction_created_at DESC,
-        prediction_hour_offset
+        route_id, stop_id, stop_sequence, direction_id,
+        prediction_created_at DESC
     );
 
 COMMENT ON TABLE gtfs_realtime.regional_delay_predictions
@@ -96,12 +79,12 @@ COMMENT ON COLUMN gtfs_realtime.regional_delay_predictions.confidence_score
 -- =====================================================
 -- 3. Latest Predictions View (for API)
 -- =====================================================
-
+drop view if exists gtfs_realtime.regional_predictions_latest;
 CREATE OR REPLACE VIEW gtfs_realtime.regional_predictions_latest AS
 WITH latest_batch AS (
-    SELECT region_id, MAX(prediction_created_at) as latest_time
+    SELECT route_id, stop_id, stop_sequence, direction_id, MAX(prediction_created_at) as latest_time
     FROM gtfs_realtime.regional_delay_predictions
-    GROUP BY region_id
+    GROUP BY route_id, stop_id, stop_sequence, direction_id
 )
 SELECT
     p.prediction_id,
@@ -110,26 +93,16 @@ SELECT
     p.direction_id,
     p.stop_id,
     p.stop_name,
-    p.stop_lat,
-    p.stop_lon,
-    p.prediction_created_at,
+    p.stop_sequence,
     p.prediction_target_time,
-    p.prediction_hour_offset,
     p.predicted_delay_seconds,
-    p.predicted_delay_minutes,
-    p.model_version,
-    -- 予測カテゴリー
-    CASE
-        WHEN p.predicted_delay_minutes < 0 THEN 'early'
-        WHEN p.predicted_delay_minutes < 1 THEN 'on_time'
-        WHEN p.predicted_delay_minutes < 3 THEN 'slight_delay'
-        WHEN p.predicted_delay_minutes < 5 THEN 'moderate_delay'
-        WHEN p.predicted_delay_minutes < 10 THEN 'significant_delay'
-        ELSE 'severe_delay'
-    END as delay_category
+    p.predicted_delay_minutes
 FROM gtfs_realtime.regional_delay_predictions p
 INNER JOIN latest_batch lb
-    ON p.region_id = lb.region_id
+    ON p.stop_id = lb.stop_id
+    AND p.route_id = lb.route_id
+    AND p.stop_sequence = lb.stop_sequence
+    AND p.direction_id = lb.direction_id
     AND p.prediction_created_at = lb.latest_time
 ORDER BY p.region_id, p.route_id, p.direction_id, p.stop_id, p.prediction_hour_offset;
 
