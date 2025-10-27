@@ -219,11 +219,10 @@ class StopArrivalPrediction(BaseModel):
     trip_headsign: Optional[str] = Field(None, description="Trip headsign")
     direction_id: int = Field(..., description="Direction ID")
     stop_sequence: Optional[int] = Field(None, description="Stop sequence in route")
-    arrival_time: str = Field(..., description="Scheduled arrival time")
-    prediction_target_time: Optional[str] = Field(None, description="Prediction target time")
-    predicted_delay_seconds: Optional[float] = Field(None, description="Predicted delay in seconds")
     service_id: Optional[str] = Field(None, description="Service ID")
-    next_arrival_time: Optional[str] = Field(None, description="Next arrival time")
+    next_arrival_time: str = Field(..., description="Next arrival time for this route/direction")
+    predicted_delay_seconds: Optional[float] = Field(None, description="Predicted delay in seconds")
+    previous_stop_arrival_delay: Optional[float] = Field(None, description="Actual delay at previous stop in seconds")
 
     class Config:
         schema_extra = {
@@ -233,9 +232,10 @@ class StopArrivalPrediction(BaseModel):
                 "trip_headsign": "Downtown",
                 "direction_id": 0,
                 "stop_sequence": 5,
-                "arrival_time": "14:30:00",
-                "prediction_target_time": "2025-10-26 14:00:00-07",
-                "predicted_delay_seconds": 120.5
+                "service_id": "WE",
+                "next_arrival_time": "14:30:00",
+                "predicted_delay_seconds": 120.5,
+                "previous_stop_arrival_delay": 95.3
             }
         }
 
@@ -260,9 +260,10 @@ class StopPredictionsResponse(BaseModel):
                         "trip_headsign": "Downtown",
                         "direction_id": 0,
                         "stop_sequence": 5,
-                        "arrival_time": "14:30:00",
-                        "prediction_target_time": "2025-10-26 14:00:00-07",
-                        "predicted_delay_seconds": 120.5
+                        "service_id": "WE",
+                        "next_arrival_time": "14:30:00",
+                        "predicted_delay_seconds": 120.5,
+                        "previous_stop_arrival_delay": 95.3
                     }
                 ]
             }

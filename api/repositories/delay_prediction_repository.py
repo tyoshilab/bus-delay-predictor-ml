@@ -49,13 +49,16 @@ class DelayPredictionRepository:
                 trip.direction_id,
                 trip.service_id
             )
-            select na.*, trip.trip_id, trip.trip_headsign, st.stop_sequence, rpl.predicted_delay_seconds, date_trunc('hour', current_date + na.next_arrival_time) as prediction_target_time
+            select na.*, trip.trip_id, trip.trip_headsign, st.stop_sequence, rpl.predicted_delay_seconds, rt.arrival_delay as previous_stop_arrival_delay
             from gtfs_static.gtfs_stop_times st
                 inner join next_arrivals na 
                 on st.arrival_time = na.next_arrival_time
                 and st.stop_id = '{stop_id}'
             inner join gtfs_static.gtfs_trips_static trip
                 on trip.trip_id = st.trip_id
+            left join gtfs_realtime.gtfs_rt_base_mv rt
+                on rt.trip_id = trip.trip_id
+                and rt.stop_sequence = st.stop_sequence - 1
             left join gtfs_realtime.regional_predictions_latest rpl
                 on rpl.stop_id = st.stop_id
                 and rpl.prediction_target_time = date_trunc('hour', current_date + na.next_arrival_time);

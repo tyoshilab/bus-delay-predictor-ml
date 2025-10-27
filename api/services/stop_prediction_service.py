@@ -63,11 +63,10 @@ class StopPredictionService:
                 "trip_headsign": row.get("trip_headsign"),
                 "direction_id": int(row.get("direction_id", 0)),
                 "stop_sequence": int(row.get("stop_sequence")) if pd.notna(row.get("stop_sequence")) else None,
-                "arrival_time": str(row.get("arrival_time", "")),
-                "prediction_target_time": str(row.get("prediction_target_time")) if pd.notna(row.get("prediction_target_time")) else None,
-                "predicted_delay_seconds": float(row.get("predicted_delay_seconds")) if pd.notna(row.get("predicted_delay_seconds")) else None,
                 "service_id": str(row.get("service_id")) if pd.notna(row.get("service_id")) else None,
-                "next_arrival_time": str(row.get("next_arrival_time")) if pd.notna(row.get("next_arrival_time")) else None
+                "next_arrival_time": str(row.get("next_arrival_time", "")),
+                "predicted_delay_seconds": float(row.get("predicted_delay_seconds")) if pd.notna(row.get("predicted_delay_seconds")) else None,
+                "previous_stop_arrival_delay": float(row.get("previous_stop_arrival_delay")) if pd.notna(row.get("previous_stop_arrival_delay")) else None
             }
             arrivals.append(arrival)
 
