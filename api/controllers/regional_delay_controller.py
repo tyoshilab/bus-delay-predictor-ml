@@ -8,12 +8,9 @@ Business logic is delegated to the Service layer.
 from fastapi import APIRouter, HTTPException, status, Query
 from typing import Optional
 import logging
-from datetime import datetime
 
 from ..models import (
-    RegionalPredictionRequest,
     RegionalPredictionResponse,
-    StopPrediction,
     AllRegionsResponse,
     ErrorResponse
 )
@@ -177,33 +174,4 @@ async def get_all_regions_status():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch status: {str(e)}"
-        )
-
-@router.get(
-    "/health",
-    status_code=status.HTTP_200_OK,
-    summary="Health check for regional service",
-    description="Check if the regional delay service is operational"
-)
-async def regional_health_check():
-    """
-    Health check for regional delay service.
-
-    Verifies database connectivity and service status.
-    """
-    try:
-        _initialize_services()
-        db_ok = _db_connector.test_connection()
-
-        return {
-            "status": "healthy" if db_ok else "degraded",
-            "service": "regional-delay",
-            "database_connected": db_ok,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Regional service is not healthy"
         )

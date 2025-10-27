@@ -208,6 +208,127 @@ class RegionsListResponse(BaseModel):
 # Error Response Models
 # ==========================================
 
+# ==========================================
+# Stop Prediction Models
+# ==========================================
+
+class StopArrivalPrediction(BaseModel):
+    """Arrival time and prediction for a stop."""
+    route_id: str = Field(..., description="Route ID")
+    trip_id: str = Field(..., description="Trip ID")
+    trip_headsign: Optional[str] = Field(None, description="Trip headsign")
+    direction_id: int = Field(..., description="Direction ID")
+    stop_sequence: Optional[int] = Field(None, description="Stop sequence in route")
+    arrival_time: str = Field(..., description="Scheduled arrival time")
+    prediction_target_time: Optional[str] = Field(None, description="Prediction target time")
+    predicted_delay_seconds: Optional[float] = Field(None, description="Predicted delay in seconds")
+    service_id: Optional[str] = Field(None, description="Service ID")
+    next_arrival_time: Optional[str] = Field(None, description="Next arrival time")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "route_id": "6618",
+                "trip_id": "12345",
+                "trip_headsign": "Downtown",
+                "direction_id": 0,
+                "stop_sequence": 5,
+                "arrival_time": "14:30:00",
+                "prediction_target_time": "2025-10-26 14:00:00-07",
+                "predicted_delay_seconds": 120.5
+            }
+        }
+
+
+class StopPredictionsResponse(BaseModel):
+    """Response model for stop predictions."""
+    stop_id: str = Field(..., description="Stop ID")
+    current_time: str = Field(..., description="Current timestamp")
+    total_arrivals: int = Field(..., description="Total number of upcoming arrivals")
+    arrivals: List[StopArrivalPrediction] = Field(..., description="List of upcoming arrivals with predictions")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "stop_id": "12345",
+                "current_time": "2025-10-26 13:00:00",
+                "total_arrivals": 5,
+                "arrivals": [
+                    {
+                        "route_id": "6618",
+                        "trip_id": "12345",
+                        "trip_headsign": "Downtown",
+                        "direction_id": 0,
+                        "stop_sequence": 5,
+                        "arrival_time": "14:30:00",
+                        "prediction_target_time": "2025-10-26 14:00:00-07",
+                        "predicted_delay_seconds": 120.5
+                    }
+                ]
+            }
+        }
+
+
+class RouteStopArrival(BaseModel):
+    """Arrival and prediction for a specific route and stop."""
+    route_id: str = Field(..., description="Route ID")
+    trip_id: str = Field(..., description="Trip ID")
+    stop_id: str = Field(..., description="Stop ID")
+    direction_id: int = Field(..., description="Direction ID")
+    stop_sequence: Optional[int] = Field(None, description="Stop sequence")
+    trip_headsign: Optional[str] = Field(None, description="Trip headsign")
+    arrival_time: str = Field(..., description="Scheduled arrival time")
+    prediction_target_time: Optional[str] = Field(None, description="Prediction target time")
+    predicted_delay_seconds: Optional[float] = Field(None, description="Predicted delay in seconds")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "route_id": "6618",
+                "trip_id": "12345",
+                "stop_id": "12345",
+                "direction_id": 0,
+                "stop_sequence": 5,
+                "trip_headsign": "Downtown",
+                "arrival_time": "14:30:00",
+                "prediction_target_time": "2025-10-26 14:00:00-07",
+                "predicted_delay_seconds": 120.5
+            }
+        }
+
+
+class RouteStopPredictionsResponse(BaseModel):
+    """Response model for route-specific stop predictions."""
+    stop_id: str = Field(..., description="Stop ID")
+    route_id: str = Field(..., description="Route ID")
+    current_time: str = Field(..., description="Current timestamp")
+    total_arrivals: int = Field(..., description="Total number of upcoming arrivals")
+    arrivals: List[RouteStopArrival] = Field(..., description="List of upcoming arrivals with predictions")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "stop_id": "12345",
+                "route_id": "6618",
+                "current_time": "2025-10-26 13:00:00",
+                "total_arrivals": 3,
+                "arrivals": [
+                    {
+                        "route_id": "6618",
+                        "trip_id": "12345",
+                        "stop_id": "12345",
+                        "direction_id": 0,
+                        "stop_sequence": 5,
+                        "trip_headsign": "Downtown",
+                        "arrival_time": "14:30:00",
+                        "prediction_target_time": "2025-10-26 14:00:00-07",
+                        "predicted_delay_seconds": 120.5
+                    }
+                ]
+            }
+        }
+
+
 class ErrorResponse(BaseModel):
     """Error response model."""
     error: str = Field(..., description="Error type")

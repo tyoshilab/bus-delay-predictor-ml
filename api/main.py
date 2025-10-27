@@ -18,7 +18,7 @@ VANCOUVER_TZ = pytz.timezone('America/Vancouver')
 os.environ['TZ'] = 'America/Vancouver'
 
 # Import controllers (routers)
-from .controllers import regional_delay_router
+from .controllers import regional_delay_router, stop_prediction_router
 
 # Configure logging
 logging.basicConfig(
@@ -51,25 +51,27 @@ app = FastAPI(
 
     ### Example Usage
 
-    **Single Route Prediction:**
+    **Regional Prediction:**
     ```python
     import requests
 
-    response = requests.post(
-        "http://localhost:8000/api/v1/predictions/route",
-        json={
-            "route_id": "6618",
-            "direction_id": 0,
-            "lookback_days": 7
-        }
+    response = requests.get(
+        "http://localhost:8000/api/v1/regional/predict/vancouver?forecast_hours=3"
     )
     print(response.json())
     ```
 
-    **Regional Prediction:**
+    **Stop Predictions:**
     ```python
+    # Get all upcoming arrivals at a stop with predictions
     response = requests.get(
-        "http://localhost:8000/api/v1/regional/predict/vancouver?forecast_hours=3"
+        "http://localhost:8000/api/v1/stops/12345/predictions"
+    )
+    print(response.json())
+
+    # Get arrivals for a specific route at a stop
+    response = requests.get(
+        "http://localhost:8000/api/v1/stops/12345/routes/6618/predictions"
     )
     print(response.json())
     ```
@@ -102,6 +104,12 @@ app.include_router(
     tags=["Regional Analysis"]
 )
 
+app.include_router(
+    stop_prediction_router,
+    prefix="/api/v1/stops",
+    tags=["Stop Predictions"]
+)
+
 
 @app.get("/", tags=["Root"])
 async def root():
@@ -119,19 +127,13 @@ async def root():
             "health": "/health"
         },
         "api_v1": {
-            "predictions": {
-                "route_prediction": "POST /api/v1/predictions/route",
-                "route_prediction_get": "GET /api/v1/predictions/route/{route_id}",
-                "health": "GET /api/v1/predictions/health"
-            },
             "regional": {
-                "regional_prediction": "POST /api/v1/regional/predict",
-                "regional_prediction_get": "GET /api/v1/regional/predict/{region_id}",
-                "all_regions_status": "GET /api/v1/regional/status",
-                "ranking": "GET /api/v1/regional/ranking",
-                "list_regions": "GET /api/v1/regional/regions",
-                "region_info": "GET /api/v1/regional/regions/{region_id}",
-                "health": "GET /api/v1/regional/health"
+                "regional_predictions": "GET /api/v1/regional/predict/{region_id}",
+                "all_regions_status": "GET /api/v1/regional/status"
+            },
+            "stops": {
+                "stop_predictions": "GET /api/v1/stops/{stop_id}/predictions",
+                "route_stop_predictions": "GET /api/v1/stops/{stop_id}/routes/{route_id}/predictions"
             }
         }
     }
@@ -148,8 +150,8 @@ async def health_check():
             "service": "gtfs-delay-prediction-api",
             "version": "2.0.0",
             "components": {
-                "predictions": "Check /api/v1/predictions/health",
-                "regional": "Check /api/v1/regional/health"
+                "regional": "Check /api/v1/regional/health",
+                "stops": "Check /api/v1/health"
             }
         }
     except Exception as e:
