@@ -15,6 +15,7 @@ import time
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import pytz
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent.parent
@@ -230,11 +231,14 @@ class RegionalDelayPredictionJob(DataProcessingJob):
         else:
             y_pred_2d = y_pred[:, :self.output_timesteps]
 
-        # 予測基準時刻（現在時刻）
-        prediction_created_at = datetime.now()
+        # Vancouver タイムゾーンを設定
+        vancouver_tz = pytz.timezone('America/Vancouver')
+
+        # 予測基準時刻（現在時刻 - タイムゾーン aware）
+        prediction_created_at = datetime.now(vancouver_tz)
 
         # 今の0分時点を計算（例: 14:23 -> 14:00）
-        current_time = datetime.now()
+        current_time = datetime.now(vancouver_tz)
         current_hour = current_time.replace(minute=0, second=0, microsecond=0)
 
         results = []
