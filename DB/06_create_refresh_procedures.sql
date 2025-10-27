@@ -59,6 +59,66 @@ END;
 $$;
 
 -- =====================================================
+-- PROCEDURE 2: GTFS Static Views Refresh
+-- =====================================================
+-- Use: Refresh GTFS static materialized views
+-- Should be run after loading new GTFS static data
+-- =====================================================
+
+CREATE OR REPLACE PROCEDURE gtfs_static.refresh_static_views()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    start_time TIMESTAMPTZ;
+    end_time TIMESTAMPTZ;
+    duration NUMERIC;
+    row_cnt BIGINT;
+BEGIN
+    RAISE NOTICE 'Starting static views refresh at %', NOW();
+
+    -- Refresh Active Service Dates MV
+    start_time := clock_timestamp();
+    BEGIN
+        RAISE NOTICE 'Refreshing gtfs_active_service_dates_mv...';
+        REFRESH MATERIALIZED VIEW CONCURRENTLY gtfs_static.gtfs_active_service_dates_mv;
+        GET DIAGNOSTICS row_cnt = ROW_COUNT;
+        end_time := clock_timestamp();
+        duration := EXTRACT(EPOCH FROM (end_time - start_time));
+
+        INSERT INTO gtfs_static.mv_refresh_log (mv_name, last_refresh, row_count, execution_time)
+        VALUES ('gtfs_active_service_dates_mv', end_time, row_cnt, end_time - start_time)
+        ON CONFLICT (mv_name, last_refresh) DO NOTHING;
+
+        ANALYZE gtfs_static.gtfs_active_service_dates_mv;
+        RAISE NOTICE 'Active Service Dates MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Failed to refresh gtfs_active_service_dates_mv: %', SQLERRM;
+    END;
+
+    -- Refresh Stops Enhanced MV
+    start_time := clock_timestamp();
+    BEGIN
+        RAISE NOTICE 'Refreshing gtfs_stops_enhanced_mv...';
+        REFRESH MATERIALIZED VIEW CONCURRENTLY gtfs_static.gtfs_stops_enhanced_mv;
+        GET DIAGNOSTICS row_cnt = ROW_COUNT;
+        end_time := clock_timestamp();
+        duration := EXTRACT(EPOCH FROM (end_time - start_time));
+
+        INSERT INTO gtfs_static.mv_refresh_log (mv_name, last_refresh, row_count, execution_time)
+        VALUES ('gtfs_stops_enhanced_mv', end_time, row_cnt, end_time - start_time)
+        ON CONFLICT (mv_name, last_refresh) DO NOTHING;
+
+        ANALYZE gtfs_static.gtfs_stops_enhanced_mv;
+        RAISE NOTICE 'Stops Enhanced MV refreshed: % rows in % seconds', row_cnt, ROUND(duration, 2);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Failed to refresh gtfs_stops_enhanced_mv: %', SQLERRM;
+    END;
+
+    RAISE NOTICE 'Static views refresh completed at %', NOW();
+END;
+$$;
+
+-- =====================================================
 -- Helper Functions
 -- =====================================================
 

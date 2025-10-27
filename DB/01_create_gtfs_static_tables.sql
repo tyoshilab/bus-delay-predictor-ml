@@ -122,13 +122,21 @@ create table if not exists gtfs_stop_times (
   , drop_off_type integer default 0
   , shape_dist_traveled numeric(10, 4)
   , timepoint integer default 0
+  , arrival_day_offset integer default 0
+  , departure_day_offset integer default 0
 ) ;
+
+comment on column gtfs_stop_times.arrival_day_offset is 'Day offset for arrival time. 0 = same service day, 1 = next day. Used for times >= 24:00:00 in GTFS.';
+comment on column gtfs_stop_times.departure_day_offset is 'Day offset for departure time. 0 = same service day, 1 = next day. Used for times >= 24:00:00 in GTFS.';
 
 create index if not exists idx_stop_times_stop
   on gtfs_stop_times(stop_id);
 
 create index if not exists idx_stop_times_trip
   on gtfs_stop_times(trip_id);
+
+create index if not exists idx_stop_times_arrival_with_offset
+  on gtfs_stop_times(stop_id, arrival_day_offset, arrival_time);
 
 create unique index if not exists gtfs_stop_times_PKI
   on gtfs_stop_times(trip_id,stop_sequence);
@@ -532,5 +540,50 @@ alter table gtfs_rt_vehicle_positions
 
 alter table gtfs_rt_vehicle_positions
   add constraint gtfs_rt_vehicle_positions_FK3 foreign key (vehicle_descriptor_id) references gtfs_rt_vehicle_descriptors(vehicle_descriptor_id);
+
+-- =============================================================================
+-- Helper Functions for Day Offset Handling
+-- =============================================================================
+-- Purpose: Support GTFS specification for times >= 24:00:00
+-- GTFS Spec: "Times greater than 24:00:00 are used for times occurring
+--            on the following service day. For example, 25:35:00 is
+--            1:35 AM on the day after the service date."
+-- =============================================================================
+
+SET search_path TO gtfs_static, public;
+
+-- Calculate actual timestamp for a stop time
+CREATE OR REPLACE FUNCTION gtfs_static.get_stop_actual_time(
+    service_date DATE,
+    time_of_day TIME,
+    day_offset INTEGER
+)
+RETURNS TIMESTAMP
+LANGUAGE SQL IMMUTABLE
+AS $$
+    SELECT (service_date + (day_offset || ' days')::INTERVAL + time_of_day::INTERVAL)::TIMESTAMP;
+$$;
+
+COMMENT ON FUNCTION gtfs_static.get_stop_actual_time IS
+'Calculate actual timestamp from service date, time, and day offset.
+Example: get_stop_actual_time(''2025-10-24'', ''01:35:00'', 1) = ''2025-10-25 01:35:00''';
+
+-- Calculate actual arrival timestamp for a stop_time record
+CREATE OR REPLACE FUNCTION gtfs_static.get_actual_arrival_time(
+    service_date DATE,
+    stop_time_record gtfs_static.gtfs_stop_times
+)
+RETURNS TIMESTAMP
+LANGUAGE SQL IMMUTABLE
+AS $$
+    SELECT gtfs_static.get_stop_actual_time(
+        service_date,
+        stop_time_record.arrival_time,
+        stop_time_record.arrival_day_offset
+    );
+$$;
+
+COMMENT ON FUNCTION gtfs_static.get_actual_arrival_time IS
+'Calculate actual arrival timestamp for a stop_time record, accounting for day offset.';
 
 RESET search_path;

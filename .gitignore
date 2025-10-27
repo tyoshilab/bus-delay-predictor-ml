@@ -16,10 +16,7 @@ data/**/*.csv
 *.dump
 
 # バッチダウンロードディレクトリ
-batch/downloads/climate/*.csv
-batch/downloads/gtfs_static/*.txt
-batch/downloads/gtfs_static/*.zip
-batch/downloads/gtfs_realtime/*.pb
+batch/downloads/*
 
 # ===== 分析ファイル =====
 files/analysis/
