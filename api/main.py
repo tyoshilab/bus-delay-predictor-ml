@@ -128,7 +128,6 @@ async def root():
         },
         "api_v1": {
             "regional": {
-                "regional_predictions": "GET /api/v1/regional/predict/{region_id}",
                 "all_regions_status": "GET /api/v1/regional/status"
             },
             "stops": {
