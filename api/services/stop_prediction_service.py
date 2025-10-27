@@ -106,13 +106,11 @@ class StopPredictionService:
                 "arrivals": []
             }
 
-        # Convert DataFrame to list of dictionaries
+        # Convert DataFrame to list of dictionaries (exclude route_id and stop_id as they're in the response root)
         arrivals = []
         for _, row in df.iterrows():
             arrival = {
-                "route_id": str(row.get("route_id", "")),
                 "trip_id": str(row.get("trip_id", "")),
-                "stop_id": str(row.get("stop_id", "")),
                 "direction_id": int(row.get("direction_id", 0)),
                 "stop_sequence": int(row.get("stop_sequence")) if pd.notna(row.get("stop_sequence")) else None,
                 "trip_headsign": row.get("trip_headsign"),

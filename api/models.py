@@ -271,9 +271,7 @@ class StopPredictionsResponse(BaseModel):
 
 class RouteStopArrival(BaseModel):
     """Arrival and prediction for a specific route and stop."""
-    route_id: str = Field(..., description="Route ID")
     trip_id: str = Field(..., description="Trip ID")
-    stop_id: str = Field(..., description="Stop ID")
     direction_id: int = Field(..., description="Direction ID")
     stop_sequence: Optional[int] = Field(None, description="Stop sequence")
     trip_headsign: Optional[str] = Field(None, description="Trip headsign")
@@ -284,9 +282,7 @@ class RouteStopArrival(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "route_id": "6618",
                 "trip_id": "12345",
-                "stop_id": "12345",
                 "direction_id": 0,
                 "stop_sequence": 5,
                 "trip_headsign": "Downtown",
@@ -314,9 +310,7 @@ class RouteStopPredictionsResponse(BaseModel):
                 "total_arrivals": 3,
                 "arrivals": [
                     {
-                        "route_id": "6618",
                         "trip_id": "12345",
-                        "stop_id": "12345",
                         "direction_id": 0,
                         "stop_sequence": 5,
                         "trip_headsign": "Downtown",
