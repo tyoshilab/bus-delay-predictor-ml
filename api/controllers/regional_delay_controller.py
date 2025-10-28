@@ -71,69 +71,69 @@ def get_delay_predict_service() -> DelayPredictService:
 # Endpoints
 # ==========================================
 
-@router.get(
-    "/predict/{region_id}",
-    response_model=RegionalPredictionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get regional delay predictions per stop",
-    description="""
-    Get latest batch-predicted bus delays for all stops in a region.
+# @router.get(
+#     "/predict/{region_id}",
+#     response_model=RegionalPredictionResponse,
+#     status_code=status.HTTP_200_OK,
+#     summary="Get regional delay predictions per stop",
+#     description="""
+#     Get latest batch-predicted bus delays for all stops in a region.
 
-    **How it works:**
-    - Fetches latest predictions from batch processing job
-    - Batch job runs periodically using ConvLSTM model
-    - Returns predictions per stop with route and location information
-    - Forecasts available for next 1-3 hours
+#     **How it works:**
+#     - Fetches latest predictions from batch processing job
+#     - Batch job runs periodically using ConvLSTM model
+#     - Returns predictions per stop with route and location information
+#     - Forecasts available for next 1-3 hours
 
-    **Data source:** Pre-computed predictions from regional_delay_predictions table
-    """,
-    responses={
-        200: {"description": "Latest predictions with per-stop forecasts"},
-        404: {"model": ErrorResponse, "description": "Region not found or no predictions available"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
-)
-async def predict_regional_delay_get(
-    region_id: str,
-    forecast_hours: int = Query(
-        3,
-        ge=1,
-        le=3,
-        description="Number of hours to forecast (1-3)"
-    )
-):
-    """
-    Get latest batch-predicted regional delays per stop.
+#     **Data source:** Pre-computed predictions from regional_delay_predictions table
+#     """,
+#     responses={
+#         200: {"description": "Latest predictions with per-stop forecasts"},
+#         404: {"model": ErrorResponse, "description": "Region not found or no predictions available"},
+#         500: {"model": ErrorResponse, "description": "Internal server error"}
+#     }
+# )
+# async def predict_regional_delay_get(
+#     region_id: str,
+#     forecast_hours: int = Query(
+#         3,
+#         ge=1,
+#         le=3,
+#         description="Number of hours to forecast (1-3)"
+#     )
+# ):
+#     """
+#     Get latest batch-predicted regional delays per stop.
 
-    Fetches pre-computed predictions from the batch processing job.
-    Predictions are updated periodically by the regional delay prediction batch job.
+#     Fetches pre-computed predictions from the batch processing job.
+#     Predictions are updated periodically by the regional delay prediction batch job.
 
-    Args:
-        region_id: Region identifier (e.g., 'vancouver', 'burnaby')
-        forecast_hours: Number of hours to forecast (default: 3)
+#     Args:
+#         region_id: Region identifier (e.g., 'vancouver', 'burnaby')
+#         forecast_hours: Number of hours to forecast (default: 3)
 
-    Returns:
-        Per-stop predictions with route, location, and hourly delay forecasts
-    """
-    try:
-        logger.info(f"Fetching predictions for region '{region_id}' for next {forecast_hours} hours")
+#     Returns:
+#         Per-stop predictions with route, location, and hourly delay forecasts
+#     """
+#     try:
+#         logger.info(f"Fetching predictions for region '{region_id}' for next {forecast_hours} hours")
 
-        service = get_delay_predict_service()
-        result = await service.predict_regional_delay(
-            region_id=region_id,
-            forecast_hours=forecast_hours
-        )
+#         service = get_delay_predict_service()
+#         result = await service.predict_regional_delay(
+#             region_id=region_id,
+#             forecast_hours=forecast_hours
+#         )
 
-        logger.info(f"Successfully fetched predictions for {result['total_stops']} stops")
+#         logger.info(f"Successfully fetched predictions for {result['total_stops']} stops")
 
-        return result
+#         return result
 
-    except Exception as e:
-        logger.error(f"Failed to fetch regional predictions: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch predictions: {str(e)}"
-        )
+#     except Exception as e:
+#         logger.error(f"Failed to fetch regional predictions: {e}", exc_info=True)
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to fetch predictions: {str(e)}"
+#         )
 
 
 @router.get(
