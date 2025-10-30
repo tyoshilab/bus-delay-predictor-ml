@@ -30,7 +30,7 @@ class RegionalDelayRepository:
                     DATE_TRUNC('hour', base.actual_arrival_time) AS time_bucket,
                     MAX(se.stop_lat) AS stop_lat,
                     MAX(se.stop_lon) AS stop_lon,
-                    AVG(base.arrival_delay) / 60.0 AS avg_delay_minutes
+                    AVG(base.arrival_delay) AS avg_delay_seconds
                 FROM gtfs_realtime.gtfs_rt_base_mv base
                 INNER JOIN gtfs_static.gtfs_stops_enhanced_mv se
                     ON se.stop_id = base.stop_id
@@ -49,7 +49,7 @@ class RegionalDelayRepository:
                 region_id,
                 stop_lat as center_lat,
                 stop_lon as center_lon,
-                avg_delay_minutes
+                avg_delay_seconds
             FROM ranked
             WHERE rn = 1
             ORDER BY region_id;

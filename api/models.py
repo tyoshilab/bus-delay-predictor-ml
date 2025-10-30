@@ -154,7 +154,7 @@ class RegionStatus(BaseModel):
     region_id: str = Field(..., description="Region ID")
     center_lat: Optional[float] = Field(None, description="Center latitude")
     center_lon: Optional[float] = Field(None, description="Center longitude")
-    avg_delay_minutes: Optional[float] = Field(None, description="Average delay in minutes")
+    avg_delay_seconds: Optional[float] = Field(None, description="Average delay in seconds")
 
 
 class AllRegionsResponse(BaseModel):
