@@ -22,7 +22,7 @@ from batch.config.settings import config
 from batch.jobs.base_job import DatabaseJob
 from batch.utils.file_utils import cleanup_old_files
 from batch.utils.error_handler import APIError, DatabaseError
-from batch.utils.mv_utils import refresh_materialized_views, log_refresh_statistics
+from batch.utils.mv_utils import refresh_materialized_views, log_refresh_statistics, refresh_alert_feature_views
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +270,7 @@ class GTFSRealtimeFetchJob(DatabaseJob):
                 db_connector = DatabaseConnector()
 
                 with db_connector.get_connection() as conn:
+                    # 1. 通常のMVをリフレッシュ
                     refresh_success = refresh_materialized_views(
                         conn
                     )
@@ -282,9 +283,14 @@ class GTFSRealtimeFetchJob(DatabaseJob):
                         results['summary']['mv_refreshed'] = False
                         self.logger.warning("Materialized view refresh failed, but job continues")
 
+                    # 2. アラート特徴量MVをリフレッシュ
+                    alert_mv_success = refresh_alert_feature_views(conn)
+                    results['summary']['alert_mv_refreshed'] = alert_mv_success
+
             except Exception as e:
                 self.logger.error(f"Error refreshing materialized views: {e}", exc_info=True)
                 results['summary']['mv_refreshed'] = False
+                results['summary']['alert_mv_refreshed'] = False
                 # MVリフレッシュの失敗はジョブ全体の失敗にしない
                 self.logger.warning("Materialized view refresh failed, but job continues")
         else:

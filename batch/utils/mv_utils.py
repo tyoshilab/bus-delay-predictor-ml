@@ -68,7 +68,7 @@ def get_refresh_status(connection) -> Optional[dict]:
 def log_refresh_statistics(connection):
     """
     マテリアライズドビューの統計情報をログに出力
-    
+
     Args:
         connection: psycopg2 connection object
     """
@@ -78,7 +78,7 @@ def log_refresh_statistics(connection):
             cur.execute("SELECT * FROM gtfs_realtime.mv_statistics;")
             columns = [desc[0] for desc in cur.description]
             results = cur.fetchall()
-            
+
             logger.info("Materialized View Statistics:")
             logger.info("-" * 80)
             for row in results:
@@ -89,6 +89,31 @@ def log_refresh_statistics(connection):
                     f"size: {stats.get('total_size', 'N/A')}"
                 )
             logger.info("-" * 80)
-            
+
     except Exception as e:
         logger.warning(f"Could not retrieve MV statistics: {e}")
+
+
+def refresh_alert_feature_views(connection) -> bool:
+    """
+    アラート特徴量マテリアライズドビューをリフレッシュ
+
+    Args:
+        connection: psycopg2 connection object
+
+    Returns:
+        成功したかどうか
+    """
+    try:
+        with connection.cursor() as cur:
+            logger.info(f"Refreshing alert feature materialized views...")
+            cur.execute(f"CALL gtfs_realtime.refresh_alert_feature_views();")
+            logger.info(f"✓ Alert feature views refreshed successfully")
+
+            connection.commit()
+            return True
+
+    except Exception as e:
+        logger.error(f"✗ Failed to refresh alert feature views: {e}", exc_info=True)
+        connection.rollback()
+        return False
