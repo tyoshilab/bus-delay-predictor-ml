@@ -17,13 +17,8 @@ batch_dir = os.path.dirname(controller_dir)
 project_root = os.path.dirname(batch_dir)
 
 sys.path.insert(0, project_root)
-from batch.config.database_connector import DatabaseConnector
 
-# Create a global database connector instance
-db_connector = DatabaseConnector()
-engine = db_connector.engine
-
-# Configure logging
+# Configure logging BEFORE importing DatabaseConnector
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -34,6 +29,12 @@ logger = logging.getLogger(__name__)
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
+
+from batch.config.database_connector import DatabaseConnector
+
+# Create a global database connector instance
+db_connector = DatabaseConnector()
+engine = db_connector.engine
 
 def get_primary_key_columns(engine, table_name, schema='gtfs_static'):
     """Get primary key columns for a table."""
