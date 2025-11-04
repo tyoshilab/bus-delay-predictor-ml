@@ -8,9 +8,17 @@ feature_groups_trip_based = {
     'temporal': [
         # 周期エンコーディング
         'hour_sin', 'hour_cos', 'day_sin', 'day_cos',
-        # ラッシュアワー（0/1/2の3値）
-        'rush_hour_type',
-        # 学校通学時間帯（新規）
+        # ラッシュアワー（One-hot表現）
+        'rush_hour_morning',   # 朝ラッシュ（7-9時）
+        'rush_hour_evening',   # 夕ラッシュ（17-19時）
+        # 時間帯カテゴリ（One-hot表現）
+        'time_late_night',     # 深夜（0-4時）
+        'time_early_morning',  # 早朝（5-6時）
+        'time_morning',        # 朝（7-11時）
+        'time_daytime',        # 日中（12-16時）
+        'time_evening',        # 夕方（17-20時）
+        'time_night',          # 夜（21-23時）
+        # 学校通学時間帯
         'school_commute_hour',
         # 週末・祝日
         'is_weekend', 'is_holiday',

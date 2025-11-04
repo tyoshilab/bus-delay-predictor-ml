@@ -114,12 +114,49 @@ SELECT
     ) as hour_cos,
     SIN(2 * PI() * bf.day_of_week / 7) as day_sin,
     COS(2 * PI() * bf.day_of_week / 7) as day_cos,
-    -- ラッシュアワー分類（朝=1, 夕=2, その他=0）
+    -- ====================================
+    -- カテゴリカル変数（One-hot表現）
+    -- ====================================
+    -- ラッシュアワー（朝）
     CASE
-        WHEN bf.hour_of_day BETWEEN 7 AND 9  THEN 1
-        WHEN bf.hour_of_day BETWEEN 17 AND 19  THEN 2
+        WHEN bf.hour_of_day BETWEEN 7 AND 9 THEN 1
         ELSE 0
-    END as rush_hour_type,
+    END as rush_hour_morning,
+    -- ラッシュアワー（夕）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 17 AND 19 THEN 1
+        ELSE 0
+    END as rush_hour_evening,
+    -- 時間帯: 深夜（0-4時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 0 AND 4 THEN 1
+        ELSE 0
+    END as time_late_night,
+    -- 時間帯: 早朝（5-6時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 5 AND 6 THEN 1
+        ELSE 0
+    END as time_early_morning,
+    -- 時間帯: 朝（7-11時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 7 AND 11 THEN 1
+        ELSE 0
+    END as time_morning,
+    -- 時間帯: 日中（12-16時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 12 AND 16 THEN 1
+        ELSE 0
+    END as time_daytime,
+    -- 時間帯: 夕方（17-20時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 17 AND 20 THEN 1
+        ELSE 0
+    END as time_evening,
+    -- 時間帯: 夜（21-23時）
+    CASE
+        WHEN bf.hour_of_day BETWEEN 21 AND 23 THEN 1
+        ELSE 0
+    END as time_night,
     -- 学校通学時間帯（平日の8時、15-16時）
     CASE
         WHEN bf.day_of_week <= 5
