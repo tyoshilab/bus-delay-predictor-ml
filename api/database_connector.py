@@ -64,8 +64,11 @@ class DatabaseConnector:
         """SQLクエリを実行してDataFrameを返す"""
         with self.get_connection() as conn:
             df = pd.read_sql_query(query, conn, params=params)
+        # PostgreSQLは接続時にtimezone=America/Vancouverを設定しているため、
+        # 返されるtimestampはすでにPacific Timeです。
+        # pandasはこれをtimezone-naiveとして読み込むので、正しいタイムゾーンを明示的に設定します。
         for col in df.select_dtypes(include=['datetime64']).columns:
-            df[col] = df[col].dt.tz_localize('UTC').dt.tz_convert('America/Vancouver')
+            df[col] = df[col].dt.tz_localize('America/Vancouver')
         return df
     
     def insert_dataframe(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append', schema: str = None):
