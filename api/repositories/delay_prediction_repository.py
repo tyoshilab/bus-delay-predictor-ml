@@ -61,7 +61,7 @@ class DelayPredictionRepository:
                 trip.direction_id,
                 trip.trip_headsign,
                 st.stop_sequence,
-                rpl.predicted_delay_seconds,
+                COALESCE(rpl.predicted_delay_seconds, rt2.arrival_delay) as predicted_delay_seconds,
                 rt.arrival_delay as previous_stop_arrival_delay
             FROM gtfs_static.gtfs_stop_times st
             INNER JOIN next_arrivals na
@@ -76,6 +76,9 @@ class DelayPredictionRepository:
             LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt
                 ON rt.trip_id = trip.trip_id
                 AND rt.stop_sequence = st.stop_sequence - 1
+            LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt2
+                ON rt2.trip_id = trip.trip_id
+                AND rt2.stop_sequence = st.stop_sequence
             LEFT JOIN gtfs_realtime.regional_predictions_latest rpl
                 ON rpl.stop_id = st.stop_id
                 AND rpl.stop_sequence = st.stop_sequence
@@ -113,13 +116,16 @@ class DelayPredictionRepository:
                     st.arrival_day_offset
                 ) as actual_arrival_timestamp,
                 rpl.prediction_target_time,
-                rpl.predicted_delay_seconds
+                COALESCE(rpl.predicted_delay_seconds, rt2.arrival_delay) as predicted_delay_seconds
             FROM gtfs_static.gtfs_stops s
             INNER JOIN gtfs_static.gtfs_stop_times st USING (stop_id)
             INNER JOIN gtfs_static.gtfs_trips_static trip USING (trip_id)
             INNER JOIN gtfs_static.gtfs_active_service_dates_mv asd
                 ON trip.service_id = asd.service_id
                 AND asd.service_date = CURRENT_DATE
+            LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt2
+                ON rt2.trip_id = trip.trip_id
+                AND rt2.stop_sequence = st.stop_sequence
             LEFT JOIN gtfs_realtime.regional_predictions_latest rpl
                 ON rpl.stop_id = st.stop_id
                 AND rpl.route_id = trip.route_id
