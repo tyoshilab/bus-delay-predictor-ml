@@ -14,27 +14,6 @@ class DataSplitter:
         """初期化"""
         pass
     
-    def train_test_split_temporal(self, X, y, train_ratio=0.9):
-        """
-        時系列データの時間順での分割
-        
-        Args:
-            X (np.array): 入力データ
-            y (np.array): 目標データ
-            train_ratio (float): 訓練データの割合
-            
-        Returns:
-            tuple: (X_train, X_test, y_train, y_test)
-        """
-        split_idx = int(len(X) * train_ratio)
-        
-        X_train = X[:split_idx]
-        X_test = X[split_idx:]
-        y_train = y[:split_idx]
-        y_test = y[split_idx:]
-        
-        return X_train, X_test, y_train, y_test
-    
     def reshape_for_convlstm(self, X, target_height=1, target_width=None):
         """
         ConvLSTM2D用にデータを(samples, timesteps, height, width, channels)形式に変換
@@ -102,62 +81,48 @@ class DataSplitter:
         
         return X_train, X_test, y_train, y_test, train_route_dirs, test_route_dirs
     
-    def train_test_split_sequence_aware(self, X, y, route_direction_info, 
-                                       split_method='route_aware', train_ratio=0.8, 
-                                       random_state=42):
+    def train_test_split_by_route_direction_stratified(self, X, y, route_direction_info, 
+                                                       train_ratio=0.8, random_state=42):
         """
-        シーケンス情報を考慮した分割
+        route_direction別での層化分割（各route_directionからtrain/testを分割）
         
         Args:
             X (np.array): 入力データ
             y (np.array): 目標データ
             route_direction_info (list): 各シーケンスのroute_direction情報
-            split_method (str): 分割方法 ('route_aware', 'random', 'temporal')
             train_ratio (float): 訓練データの割合
             random_state (int): 乱数シード
             
         Returns:
-            tuple: 分割方法に応じた結果
-        """
-        if split_method == 'route_aware':
-            return self.train_test_split_by_route_direction(
-                X, y, route_direction_info, train_ratio, random_state
-            )
-        elif split_method == 'random':
-            return self.train_test_split_random_sequence(
-                X, y, route_direction_info, train_ratio, random_state
-            )
-        elif split_method == 'temporal':
-            return self.train_test_split_temporal(X, y, train_ratio)
-        else:
-            raise ValueError(f"Unknown split_method: {split_method}")
-    
-    def train_test_split_random_sequence(self, X, y, route_direction_info, 
-                                        train_ratio=0.8, random_state=42):
-        """
-        ランダム分割（シーケンス単位）
-        
-        Args:
-            X (np.array): 入力データ
-            y (np.array): 目標データ
-            route_direction_info (list): route_direction情報（記録用）
-            train_ratio (float): 訓練データの割合
-            random_state (int): 乱数シード
-            
-        Returns:
-            tuple: (X_train, X_test, y_train, y_test)
+            tuple: (X_train, X_test, y_train, y_test, train_indices, test_indices)
         """
         # 乱数シードを設定
         np.random.seed(random_state)
         
-        # インデックスをランダムシャッフル
-        indices = np.arange(len(X))
-        np.random.shuffle(indices)
+        # ユニークなroute_direction取得
+        unique_route_dirs = list(set(route_direction_info))
+        # print(f"Total unique route_directions: {len(unique_route_dirs)}")
         
-        # train/test分割
-        train_count = int(len(indices) * train_ratio)
-        train_indices = indices[:train_count]
-        test_indices = indices[train_count:]
+        train_indices = []
+        test_indices = []
+        
+        # 各route_directionごとに分割
+        for route_dir in unique_route_dirs:
+            # このroute_directionに属するインデックスを取得
+            route_indices = [i for i, rd in enumerate(route_direction_info) if rd == route_dir]
+            
+            # ランダムシャッフル
+            route_indices_shuffled = np.array(route_indices)
+            np.random.shuffle(route_indices_shuffled)
+            
+            # train/test分割
+            split_point = int(len(route_indices_shuffled) * train_ratio)
+            train_indices.extend(route_indices_shuffled[:split_point].tolist())
+            test_indices.extend(route_indices_shuffled[split_point:].tolist())
+        
+        # numpy配列に変換
+        train_indices = np.array(train_indices)
+        test_indices = np.array(test_indices)
         
         # データ分割
         X_train = X[train_indices]
@@ -165,11 +130,16 @@ class DataSplitter:
         y_train = y[train_indices]
         y_test = y[test_indices]
         
-        print(f"Random split - Train sequences: {len(X_train)}")
-        print(f"Random split - Test sequences: {len(X_test)}")
+        # print(f"Train sequences: {len(X_train)} ({len(X_train)/(len(X_train)+len(X_test)):.1%})")
+        # print(f"Test sequences: {len(X_test)} ({len(X_test)/(len(X_train)+len(X_test)):.1%})")
         
-        return X_train, X_test, y_train, y_test
-    
+        # 各セットに含まれるroute_directionを確認
+        train_route_dirs = list(set([route_direction_info[i] for i in train_indices]))
+        test_route_dirs = list(set([route_direction_info[i] for i in test_indices]))
+        # print(f"Train contains {len(train_route_dirs)} route_directions")
+        # print(f"Test contains {len(test_route_dirs)} route_directions")
+        
+        return X_train, X_test, y_train, y_test, train_route_dirs, test_route_dirs
     def validate_split(self, X_train, X_test, y_train, y_test, route_direction_info=None, 
                       train_route_dirs=None, test_route_dirs=None):
         """
@@ -205,20 +175,11 @@ class DataSplitter:
             'total_samples': total_samples
         }
         
-        # route_direction重複チェック（route_aware分割の場合）
-        if train_route_dirs is not None and test_route_dirs is not None:
-            overlap = set(train_route_dirs) & set(test_route_dirs)
-            validation_results['route_direction_overlap'] = {
-                'has_overlap': len(overlap) > 0,
-                'overlap_count': len(overlap),
-                'overlapping_routes': list(overlap) if overlap else []
-            }
-            
-            validation_results['route_direction_stats'] = {
-                'train_routes': len(train_route_dirs),
-                'test_routes': len(test_route_dirs),
-                'total_unique_routes': len(set(train_route_dirs + test_route_dirs))
-            }
+        validation_results['route_direction_stats'] = {
+            'train_routes': len(train_route_dirs),
+            'test_routes': len(test_route_dirs),
+            'total_unique_routes': len(set(train_route_dirs + test_route_dirs))
+        }
         
         # Helper function to check for NaN values safely
         def safe_isnan_check(arr):
@@ -246,30 +207,6 @@ class DataSplitter:
             'y_test_has_nan': safe_isnan_check(y_test)
         }
         
-        # Helper function to safely compute statistics
-        def safe_stats(arr):
-            """Compute statistics safely, handling non-numeric types."""
-            if arr is None:
-                return {'mean': None, 'std': None, 'min': None, 'max': None}
-            try:
-                if np.issubdtype(arr.dtype, np.number):
-                    return {
-                        'mean': float(np.mean(arr)),
-                        'std': float(np.std(arr)),
-                        'min': float(np.min(arr)),
-                        'max': float(np.max(arr))
-                    }
-                else:
-                    return {'mean': None, 'std': None, 'min': None, 'max': None}
-            except (TypeError, ValueError):
-                return {'mean': None, 'std': None, 'min': None, 'max': None}
-        
-        # 統計情報
-        validation_results['statistics'] = {
-            'X_train': safe_stats(X_train),
-            'y_train': safe_stats(y_train)
-        }
-        
         return validation_results
     
     def print_split_summary(self, validation_results):
@@ -289,18 +226,6 @@ class DataSplitter:
         split_info = validation_results['split_ratio']
         print(f"Split ratio: Train {split_info['train']:.1%}, Test {split_info['test']:.1%}")
         print(f"Total samples: {split_info['total_samples']}")
-        
-        # Route_direction重複チェック結果
-        if 'route_direction_overlap' in validation_results:
-            overlap_info = validation_results['route_direction_overlap']
-            if overlap_info['has_overlap']:
-                print(f"⚠️ WARNING: Route direction overlap detected!")
-                print(f"Overlapping routes: {overlap_info['overlapping_routes']}")
-            else:
-                print("✅ No route direction overlap (good for preventing data leakage)")
-            
-            route_stats = validation_results['route_direction_stats']
-            print(f"Route directions: Train {route_stats['train_routes']}, Test {route_stats['test_routes']}")
         
         # NaNチェック結果
         nan_info = validation_results['nan_check']

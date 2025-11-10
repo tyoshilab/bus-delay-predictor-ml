@@ -121,29 +121,34 @@ class ModelEvaluator:
         
         return results
     
-    def print_evaluation_summary(self, overall_metrics, delay_level_analysis):
-        """評価結果のサマリーを表示"""
-        print(f"\n=== Overall Evaluation Results ===")
-        print(f"Mean Absolute Error (MAE): {overall_metrics['mae']:.3f} seconds")
-        print(f"Root Mean Square Error (RMSE): {overall_metrics['rmse']:.3f} seconds")
-        print(f"R-squared (R²): {overall_metrics['r2']:.3f}")
-        print(f"Direction prediction accuracy: {overall_metrics['direction_accuracy']:.3f}")
-        print(f"On-time prediction accuracy: {overall_metrics['ontime_accuracy']:.3f}")
-
-        print(f"\n=== Accuracy by Range ===")
+    def evaluation_summary(self, timestep, overall_metrics, delay_level_analysis):
+        output = f"""
+=== Overall Evaluation Results(time {timestep + 1}h) ===
+\nMean Absolute Error (MAE): {overall_metrics['mae']:.3f} seconds
+Root Mean Square Error (RMSE): {overall_metrics['rmse']:.3f} seconds
+R-squared (R²): {overall_metrics['r2']:.3f}
+Direction prediction accuracy: {overall_metrics['direction_accuracy']:.3f}
+On-time prediction accuracy: {overall_metrics['ontime_accuracy']:.3f}
+\n=== Accuracy by Range ===
+        """
         for range_name, accuracy in overall_metrics['range_accuracies'].items():
-            print(f"{range_name}: {accuracy:.3f}")
+            output += f"\n{range_name}: {accuracy:.3f}"
         
-        print(f"\n=== Prediction Accuracy by Delay Level ===")
-        print(f"{'Level':<12} {'Count':<8} {'Ratio':<8} {'MAE':<8} {'RMSE':<8} {'Dir Acc':<8}")
-        print("-" * 60)
+        output += f"""
+\n=== Prediction Accuracy by Delay Level ===
+\n{'Level':<12} {'Count':<8} {'Ratio':<8} {'MAE':<8} {'RMSE':<8} {'Dir Acc':<8}
+{'-' * 60}
+        """
 
         for level_name, metrics in delay_level_analysis.items():
-            print(f"{level_name:<12} {metrics['count']:<8} {metrics['percentage']:<7.1f}% "
-                  f"{metrics['mae']:<7.1f} {metrics['rmse']:<7.1f} {metrics['direction_accuracy']:<7.3f}")
+            output += f"\n{level_name:<12} {metrics['count']:<8} {metrics['percentage']:<7.1f} "
+            output += f"{metrics['mae']:<7.1f} {metrics['rmse']:<7.1f} {metrics['direction_accuracy']:<7.3f}"
         
-        print(f"\n=== Practical Applicability Evaluation ===")
-        print(f"• Within 1 minute accuracy: {overall_metrics['range_accuracies']['Within 1min']*100:.1f}% - Practical accuracy level")
-        print(f"• Within 2 minutes accuracy: {overall_metrics['range_accuracies']['Within 2min']*100:.1f}% - Acceptable accuracy level") 
-        print(f"• Direction prediction accuracy: {overall_metrics['direction_accuracy']*100:.1f}% - Early/delay direction prediction")
-        print(f"• R² score: {overall_metrics['r2']:.3f} - Overall prediction capability")
+        output += f"""
+\n=== Practical Applicability Evaluation ===
+\n• Within 1 minute accuracy: {overall_metrics['range_accuracies']['Within 1min']*100:.1f}% - Practical accuracy level
+• Within 2 minutes accuracy: {overall_metrics['range_accuracies']['Within 2min']*100:.1f}% - Acceptable accuracy level
+• Direction prediction accuracy: {overall_metrics['direction_accuracy']*100:.1f}% - Early/delay direction prediction
+• R² score: {overall_metrics['r2']:.3f} - Overall prediction capability
+        """
+        return output
