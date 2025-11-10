@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile.api
       args:
-        TZ: ${TZ:-America/Los_Angeles}
-    container_name: gtfs-delay-prediction-api
+        TZ: ${TZ:-America/Vancouver}
+    container_name: gtfs-api
     ports:
       - "8000:8000"
     env_file:
@@ -13,8 +13,27 @@ services:
     volumes:
       - ..:/app:cached
     working_dir: /app
-    networks:
-      - devcontainer-network
+    restart: unless-stopped
+  
+  batch:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    container_name: gtfs-batch
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      TZ: ${TZ:-America/Vancouver}
+      PREDICTION_MODEL_PATH: ${PREDICTION_MODEL_PATH:-files/model/best_delay_model.h5}
+      GTFS_RT_CLEANUP_DAYS: ${GTFS_RT_CLEANUP_DAYS:-7}
+      WEATHER_SCRAPER_ROW_LIMIT: ${WEATHER_SCRAPER_ROW_LIMIT:-40}
+      WEATHER_FILE_CLEANUP_DAYS: ${WEATHER_FILE_CLEANUP_DAYS:-7}
+      # TensorFlow optimizations
+      TF_CPP_MIN_LOG_LEVEL: "1"  # Show warnings in dev mode
+      OMP_NUM_THREADS: "4"
+      DATABASE_SSL_REQUIRE: "0"
+    volumes:
+      - ../batch:/app/batch
+      - ../files:/app/files
     restart: unless-stopped
 
   frontend:
@@ -25,29 +44,5 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ..:/workspace:cached
-    working_dir: /workspace/vencoucer-bus-scienmce
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-
-  postgres:
-    image: postgres:17.4-alpine3.21
-    container_name: gtfs-db
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - gtfs_devcontainer_postgres-data:/var/lib/postgresql/data
-    networks:
-      - devcontainer-network
-
-networks:
-  devcontainer-network:
-    driver: bridge
-
-volumes:
-  gtfs_devcontainer_postgres-data:
-    external: true
+      - ../front:/app:cached
+    working_dir: /app
