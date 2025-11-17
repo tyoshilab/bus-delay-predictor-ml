@@ -156,11 +156,14 @@ cat >> /tmp/gtfs-batch << 'CRONEOF'
 # Weather Scraper (every hour at minute 0)
 0 * * * * batchuser cd /app && python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1
 
-# GTFS Realtime Fetch (every hour at minute 0 and 30)
-0,30 * * * * batchuser cd /app && python batch/run.py load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
+# GTFS Realtime Fetch (every hour at minute 0)
+*/2 * * * * batchuser cd /app && python batch/run.py --feeds vehicle_positions load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
+5 * * * * batchuser cd /app && python batch/run.py --feeds trip_updates load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
+10 * * * * batchuser cd /app && python batch/run.py --feeds alerts load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
 
-# Regional Delay Prediction (every hour at minute 10)
-10 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1
+# Regional Delay Prediction (every hour at minute 10) 
+# 2025/11/17 tmporary disabled
+# 10 * * * * batchuser cd /app && python batch/run.py predict >> /app/batch/logs/cron_predict.log 2>&1
 
 CRONEOF
 
@@ -207,8 +210,10 @@ echo "Current time: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 echo ""
 echo "Next cron execution times:"
 echo "  Weather Scraper:  Every hour at :00"
-echo "  GTFS Fetch:       Every hour at :00 and :30"
-echo "  Prediction:       Every hour at :10 and :40"
+echo "  GTFS Fetch(trip_updates):       Every hour at :05"
+echo "  GTFS Fetch(alerts):       Every hour at :10"
+echo "  GTFS Fetch(vehicle_positions):       Every 2 minutes"
+echo "  Prediction:       Stopped (disabled)"
 echo ""
 echo "Waiting for cron jobs to execute..."
 echo "=========================================="
