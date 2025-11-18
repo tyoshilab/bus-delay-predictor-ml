@@ -259,44 +259,44 @@ class GTFSRealtimeFetchJob(DatabaseJob):
             results['load_results'] = {feed: None for feed in feeds}
 
         # ステップ3: マテリアライズドビューのリフレッシュ
-        if self.refresh_mv and not dry_run and results['summary']['successful_loads'] > 0:
-            self.logger.info("=" * 60)
-            self.logger.info("STEP 3: REFRESHING MATERIALIZED VIEWS")
-            self.logger.info("=" * 60)
+        # if self.refresh_mv and not dry_run and results['summary']['successful_loads'] > 0:
+        #     self.logger.info("=" * 60)
+        #     self.logger.info("STEP 3: REFRESHING MATERIALIZED VIEWS")
+        #     self.logger.info("=" * 60)
 
-            try:
-                # データベース接続を取得してMVをリフレッシュ
-                from batch.config.database_connector import DatabaseConnector
-                db_connector = DatabaseConnector()
+        #     try:
+        #         # データベース接続を取得してMVをリフレッシュ
+        #         from batch.config.database_connector import DatabaseConnector
+        #         db_connector = DatabaseConnector()
 
-                with db_connector.get_connection() as conn:
-                    # 1. 通常のMVをリフレッシュ
-                    refresh_success = refresh_materialized_views(
-                        conn
-                    )
+        #         with db_connector.get_connection() as conn:
+        #             # 1. 通常のMVをリフレッシュ
+        #             refresh_success = refresh_materialized_views(
+        #                 conn
+        #             )
 
-                    if refresh_success:
-                        results['summary']['mv_refreshed'] = True
-                        # 統計情報をログに出力
-                        log_refresh_statistics(conn)
-                    else:
-                        results['summary']['mv_refreshed'] = False
-                        self.logger.warning("Materialized view refresh failed, but job continues")
+        #             if refresh_success:
+        #                 results['summary']['mv_refreshed'] = True
+        #                 # 統計情報をログに出力
+        #                 log_refresh_statistics(conn)
+        #             else:
+        #                 results['summary']['mv_refreshed'] = False
+        #                 self.logger.warning("Materialized view refresh failed, but job continues")
 
-                    # 2. アラート特徴量MVをリフレッシュ
-                    alert_mv_success = refresh_alert_feature_views(conn)
-                    results['summary']['alert_mv_refreshed'] = alert_mv_success
+        #             # 2. アラート特徴量MVをリフレッシュ
+        #             alert_mv_success = refresh_alert_feature_views(conn)
+        #             results['summary']['alert_mv_refreshed'] = alert_mv_success
 
-            except Exception as e:
-                self.logger.error(f"Error refreshing materialized views: {e}", exc_info=True)
-                results['summary']['mv_refreshed'] = False
-                results['summary']['alert_mv_refreshed'] = False
-                # MVリフレッシュの失敗はジョブ全体の失敗にしない
-                self.logger.warning("Materialized view refresh failed, but job continues")
-        else:
-            results['summary']['mv_refreshed'] = False
-            if dry_run:
-                self.logger.info("\n[DRY RUN] Skipping materialized view refresh")
+        #     except Exception as e:
+        #         self.logger.error(f"Error refreshing materialized views: {e}", exc_info=True)
+        #         results['summary']['mv_refreshed'] = False
+        #         results['summary']['alert_mv_refreshed'] = False
+        #         # MVリフレッシュの失敗はジョブ全体の失敗にしない
+        #         self.logger.warning("Materialized view refresh failed, but job continues")
+        # else:
+        #     results['summary']['mv_refreshed'] = False
+        #     if dry_run:
+        #         self.logger.info("\n[DRY RUN] Skipping materialized view refresh")
 
         # ステップ4: クリーンアップ
         if self.cleanup_old_files_flag and self.save_to_disk:
