@@ -157,9 +157,9 @@ cat >> /tmp/gtfs-batch << 'CRONEOF'
 0 * * * * batchuser cd /app && python batch/run.py scrape-weather >> /app/batch/logs/cron_weather.log 2>&1
 
 # GTFS Realtime Fetch (every hour at minute 0)
-*/2 * * * * batchuser cd /app && python batch/run.py --feeds vehicle_positions load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
-5 */2 * * * batchuser cd /app && python batch/run.py --feeds trip_updates load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
-10 * * * * batchuser cd /app && python batch/run.py --feeds alerts load-realtime >> /app/batch/logs/cron_fetch.log 2>&1
+*/2 * * * * batchuser cd /app && python batch/run.py load-realtime --feeds vehicle_positions >> /app/batch/logs/cron_fetch.log 2>&1
+5 */2 * * * batchuser cd /app && python batch/run.py load-realtime --feeds trip_updates >> /app/batch/logs/cron_fetch.log 2>&1
+10 * * * * batchuser cd /app && python batch/run.py load-realtime --feeds alerts >> /app/batch/logs/cron_fetch.log 2>&1
 
 # Regional Delay Prediction (every hour at minute 10) 
 # 2025/11/17 tmporary disabled
