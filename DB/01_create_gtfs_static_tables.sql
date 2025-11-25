@@ -552,35 +552,44 @@ alter table gtfs_rt_vehicle_positions
 
 SET search_path TO gtfs_static, public;
 
+drop FUNCTION IF EXISTS gtfs_static.get_stop_actual_time(DATE, TIME, INTEGER);
 -- Calculate actual timestamp for a stop time
 CREATE OR REPLACE FUNCTION gtfs_static.get_stop_actual_time(
     service_date DATE,
     time_of_day TIME,
     day_offset INTEGER
 )
-RETURNS TIMESTAMP
+RETURNS TIMESTAMP WITH TIME ZONE
 LANGUAGE SQL IMMUTABLE
 AS $$
-    SELECT (service_date + (day_offset || ' days')::INTERVAL + time_of_day::INTERVAL)::TIMESTAMP;
+  SELECT (service_date + (day_offset || ' days')::INTERVAL + time_of_day::INTERVAL)
+       AT TIME ZONE 'America/Vancouver';
 $$;
 
 COMMENT ON FUNCTION gtfs_static.get_stop_actual_time IS
 'Calculate actual timestamp from service date, time, and day offset.
 Example: get_stop_actual_time(''2025-10-24'', ''01:35:00'', 1) = ''2025-10-25 01:35:00''';
 
+drop FUNCTION IF EXISTS gtfs_static.get_actual_arrival_time(DATE, gtfs_static.gtfs_stop_times);
 -- Calculate actual arrival timestamp for a stop_time record
 CREATE OR REPLACE FUNCTION gtfs_static.get_actual_arrival_time(
     service_date DATE,
     stop_time_record gtfs_static.gtfs_stop_times
 )
-RETURNS TIMESTAMP
+RETURNS TIMESTAMP WITH TIME ZONE
 LANGUAGE SQL IMMUTABLE
 AS $$
-    SELECT gtfs_static.get_stop_actual_time(
-        service_date,
-        stop_time_record.arrival_time,
-        stop_time_record.arrival_day_offset
-    );
+  /*
+    Return the arrival timestamp as timestamptz. The service_date is
+    interpreted as Vancouver local date and the stop_time_record's
+    arrival_time and arrival_day_offset are applied via
+    gtfs_static.get_stop_actual_time which returns a timestamptz.
+  */
+  SELECT gtfs_static.get_stop_actual_time(
+    service_date,
+    stop_time_record.arrival_time,
+    stop_time_record.arrival_day_offset
+  );
 $$;
 
 COMMENT ON FUNCTION gtfs_static.get_actual_arrival_time IS
