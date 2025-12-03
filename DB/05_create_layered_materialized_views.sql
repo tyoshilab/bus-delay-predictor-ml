@@ -79,6 +79,47 @@ ON gtfs_realtime.gtfs_rt_base_mv (start_date);
 
 ANALYZE gtfs_realtime.gtfs_rt_base_mv;
 
+-- =====================================================
+-- Base Realtime Data (gtfs_rt_base_v)
+-- =====================================================
+-- Purpose: View to aggregate raw realtime data with delay calculations
+-- =====================================================
+
+drop VIEW IF EXISTS gtfs_realtime.gtfs_rt_base_v;
+
+CREATE or REPLACE VIEW gtfs_realtime.gtfs_rt_base_v AS
+with tmp as (select 
+    td.route_id, 
+    td.trip_id, 
+    td.start_date, 
+    st.arrival_day_offset,
+    td.direction_id, 
+    st.stop_id, 
+    st.stop_sequence,
+    s.region_id,
+    s.stop_lat,
+    s.stop_lon,    
+    gtfs_static.get_stop_actual_time(
+        td.start_date::date,
+        st.arrival_time,
+        st.arrival_day_offset
+    ) as scheduled_arrival_time,
+    to_timestamp(vp.timestamp_seconds) as actual_arrival_time
+    from gtfs_realtime.gtfs_rt_trip_descriptors td
+    inner join gtfs_realtime.gtfs_rt_vehicle_positions vp using(trip_descriptor_id)
+    inner join gtfs_static.gtfs_stop_times st
+    on st.trip_id = td.trip_id and st.stop_sequence = vp.current_stop_sequence
+    inner join gtfs_static.gtfs_stops_enhanced_mv s 
+    on st.stop_id = s.stop_id
+WHERE vp.timestamp_seconds >= EXTRACT(EPOCH FROM (current_timestamp - interval '2 hour'))::bigint
+)
+select 
+    tmp.*
+    , extract(EPOCH from tmp.actual_arrival_time - tmp.scheduled_arrival_time)::int as arrival_delay
+    , DATE_TRUNC('hour', scheduled_arrival_time) as time_bucket
+    , EXTRACT(HOUR FROM scheduled_arrival_time)::INTEGER as hour_of_day
+    , EXTRACT(isodow FROM start_date::date) as day_of_week
+from tmp;
 
 -- =====================================================
 -- Analytics-Ready Data view (gtfs_rt_analytics_mv)

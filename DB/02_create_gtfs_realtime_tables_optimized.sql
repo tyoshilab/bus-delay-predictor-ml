@@ -210,6 +210,9 @@ create table if not exists gtfs_rt_vehicle_positions (
 create unique index if not exists gtfs_rt_vehicle_positions_PKI
   on gtfs_rt_vehicle_positions(id);
 
+CREATE INDEX if not exists idx_vp_timestamp_seconds 
+ON gtfs_realtime.gtfs_rt_vehicle_positions (timestamp_seconds);
+
 alter table gtfs_rt_vehicle_positions
   add constraint gtfs_rt_vehicle_positions_PKC primary key (id);
 

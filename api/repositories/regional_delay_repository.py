@@ -24,35 +24,15 @@ class RegionalDelayRepository:
             Most recent delay status or None
         """
         query = f"""
-            WITH region_hourly AS (
-                SELECT
-                    se.region_id,
-                    DATE_TRUNC('hour', base.actual_arrival_time) AS time_bucket,
-                    MAX(se.stop_lat) AS stop_lat,
-                    MAX(se.stop_lon) AS stop_lon,
-                    AVG(base.arrival_delay) AS avg_delay_seconds
-                FROM gtfs_realtime.gtfs_rt_base_mv base
-                INNER JOIN gtfs_static.gtfs_stops_enhanced_mv se
-                    ON se.stop_id = base.stop_id
-                WHERE base.actual_arrival_time >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                    AND base.arrival_delay IS NOT NULL
-                    AND se.region_id IS NOT NULL
-                GROUP BY se.region_id, time_bucket
-            ),
-            ranked AS (
-                SELECT
-                    *,
-                    ROW_NUMBER() OVER (PARTITION BY region_id ORDER BY time_bucket DESC) AS rn
-                FROM region_hourly
-            )
-            SELECT
+            select 
                 region_id,
-                stop_lat as center_lat,
-                stop_lon as center_lon,
-                avg_delay_seconds
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY region_id;
+                max(base.stop_lat) as stop_lat,
+                min(base.stop_lat) as stop_lat,
+                avg(base.arrival_delay) as avg_delay_seconds
+            from
+                gtfs_realtime.gtfs_rt_base_v base
+            group by base.region_id
+            order by base.region_id;
         """
 
         return self.db_connector.read_sql(query)

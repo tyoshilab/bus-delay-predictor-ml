@@ -27,30 +27,59 @@ class DelayPredictionRepository:
         """
 
         query = """
-            WITH next_arrivals AS (
+            WITH 
+            stop_times_filtered AS (
+                SELECT 
+                    st.trip_id,
+                    st.stop_id,
+                    st.stop_sequence,
+                    st.arrival_time,
+                    st.arrival_day_offset,
+                    gtfs_static.get_stop_actual_time(CURRENT_DATE, st.arrival_time, st.arrival_day_offset) as actual_time
+                FROM gtfs_static.gtfs_stop_times st
+                WHERE st.stop_id = %s
+            ),
+            rt_data AS (
+                SELECT 
+                    stop_id, 
+                    trip_id, 
+                    route_id,
+                    stop_sequence, 
+                    arrival_delay
+                FROM gtfs_realtime.gtfs_rt_base_v
+            ),
+            rt_data_avg AS (
+                SELECT 
+                    stop_id,
+                    route_id,
+                    AVG(arrival_delay) as avg_arrival_delay
+                FROM rt_data
+                GROUP BY route_id, stop_id
+            ),
+            next_arrivals AS (
                 SELECT
                     trip.route_id,
                     trip.trip_headsign,
                     trip.service_id,
-                    MIN(gtfs_static.get_stop_actual_time(
-                        CURRENT_DATE,
-                        st.arrival_time,
-                        st.arrival_day_offset
-                    )) as next_arrival_timestamp,
-                    MIN(st.arrival_time) as next_arrival_time,
-                    MIN(st.arrival_day_offset) as arrival_day_offset
-                FROM gtfs_static.gtfs_stop_times st
+                    MIN(stf.actual_time) as next_arrival_timestamp,
+                    MIN(stf.arrival_time) as next_arrival_time,
+                    MIN(stf.arrival_day_offset) as arrival_day_offset
+                FROM stop_times_filtered stf
                 INNER JOIN gtfs_static.gtfs_trips_static trip USING (trip_id)
                 INNER JOIN gtfs_static.gtfs_active_service_dates_mv asd
                     ON trip.service_id = asd.service_id
                     AND asd.service_date = CURRENT_DATE
-                WHERE st.stop_id = %s
-                    AND gtfs_static.get_stop_actual_time(
-                        CURRENT_DATE,
-                        st.arrival_time,
-                        st.arrival_day_offset
-                    ) >= NOW()
+                WHERE stf.actual_time >= NOW()
                 GROUP BY trip.route_id, trip.trip_headsign, trip.service_id
+            ),
+            predictions_filtered AS (
+                SELECT 
+                    stop_id,
+                    stop_sequence,
+                    prediction_target_time,
+                    predicted_delay_seconds
+                FROM gtfs_realtime.regional_predictions_latest
+                WHERE stop_id = %s
             )
             SELECT
                 na.route_id,
@@ -60,28 +89,26 @@ class DelayPredictionRepository:
                 trip.trip_id,
                 trip.direction_id,
                 trip.trip_headsign,
-                st.stop_sequence,
-                COALESCE(rpl.predicted_delay_seconds, rt2.arrival_delay) as predicted_delay_seconds,
-                rt.arrival_delay as previous_stop_arrival_delay
-            FROM gtfs_static.gtfs_stop_times st
+                stf.stop_sequence,
+                COALESCE(rpl.predicted_delay_seconds, rt_current.avg_arrival_delay) as predicted_delay_seconds,
+                rt_prev.arrival_delay as previous_stop_arrival_delay
+            FROM stop_times_filtered stf
             INNER JOIN next_arrivals na
-                ON st.arrival_time = na.next_arrival_time
-                AND st.arrival_day_offset = na.arrival_day_offset
-                AND st.stop_id = %s
+                ON stf.arrival_time = na.next_arrival_time
+                AND stf.arrival_day_offset = na.arrival_day_offset
             INNER JOIN gtfs_static.gtfs_trips_static trip
-                ON trip.trip_id = st.trip_id
-                AND trip.route_id = na.route_id
+                ON trip.trip_id = stf.trip_id
                 AND trip.trip_headsign = na.trip_headsign
                 AND trip.service_id = na.service_id
-            LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt
-                ON rt.trip_id = trip.trip_id
-                AND rt.stop_sequence = st.stop_sequence - 1
-            LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt2
-                ON rt2.trip_id = trip.trip_id
-                AND rt2.stop_sequence = st.stop_sequence
-            LEFT JOIN gtfs_realtime.regional_predictions_latest rpl
-                ON rpl.stop_id = st.stop_id
-                AND rpl.stop_sequence = st.stop_sequence
+            LEFT JOIN rt_data rt_prev
+                ON rt_prev.trip_id = trip.trip_id
+                AND rt_prev.stop_sequence = stf.stop_sequence - 1
+            LEFT JOIN rt_data_avg rt_current
+                ON rt_current.route_id = trip.route_id
+                AND rt_current.stop_id = stf.stop_id
+            LEFT JOIN predictions_filtered rpl
+                ON rpl.stop_id = stf.stop_id
+                AND rpl.stop_sequence = stf.stop_sequence
                 AND rpl.prediction_target_time = DATE_TRUNC('hour', na.next_arrival_timestamp)
             ORDER BY na.next_arrival_timestamp;
         """
@@ -101,6 +128,14 @@ class DelayPredictionRepository:
             最新の予測データと時刻表のDataFrame
         """
         query = """
+            with rt_data_avg AS (
+                SELECT 
+                    stop_id,
+                    route_id,
+                    AVG(arrival_delay) as avg_arrival_delay
+                FROM gtfs_realtime.gtfs_rt_base_v
+                GROUP BY route_id, stop_id
+            )
             SELECT
                 trip.route_id,
                 st.trip_id,
@@ -116,16 +151,16 @@ class DelayPredictionRepository:
                     st.arrival_day_offset
                 ) as actual_arrival_timestamp,
                 rpl.prediction_target_time,
-                COALESCE(rpl.predicted_delay_seconds, rt2.arrival_delay) as predicted_delay_seconds
+                COALESCE(rpl.predicted_delay_seconds, rt.avg_arrival_delay) as predicted_delay_seconds
             FROM gtfs_static.gtfs_stops s
             INNER JOIN gtfs_static.gtfs_stop_times st USING (stop_id)
             INNER JOIN gtfs_static.gtfs_trips_static trip USING (trip_id)
             INNER JOIN gtfs_static.gtfs_active_service_dates_mv asd
                 ON trip.service_id = asd.service_id
                 AND asd.service_date = CURRENT_DATE
-            LEFT JOIN gtfs_realtime.gtfs_rt_base_mv rt2
-                ON rt2.trip_id = trip.trip_id
-                AND rt2.stop_sequence = st.stop_sequence
+            LEFT JOIN rt_data_avg rt
+                ON rt.route_id = trip.route_id
+                AND rt.stop_id = st.stop_id
             LEFT JOIN gtfs_realtime.regional_predictions_latest rpl
                 ON rpl.stop_id = st.stop_id
                 AND rpl.route_id = trip.route_id
