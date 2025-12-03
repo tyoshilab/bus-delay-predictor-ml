@@ -34,7 +34,6 @@ class DelayPredictionRepository:
                     st.stop_id,
                     st.stop_sequence,
                     st.arrival_time,
-                    st.arrival_day_offset,
                     gtfs_static.get_stop_actual_time(CURRENT_DATE, st.arrival_time, st.arrival_day_offset) as actual_time
                 FROM gtfs_static.gtfs_stop_times st
                 WHERE st.stop_id = %s
@@ -62,8 +61,7 @@ class DelayPredictionRepository:
                     trip.trip_headsign,
                     trip.service_id,
                     MIN(stf.actual_time) as next_arrival_timestamp,
-                    MIN(stf.arrival_time) as next_arrival_time,
-                    MIN(stf.arrival_day_offset) as arrival_day_offset
+                    MIN(stf.arrival_time) as next_arrival_time
                 FROM stop_times_filtered stf
                 INNER JOIN gtfs_static.gtfs_trips_static trip USING (trip_id)
                 INNER JOIN gtfs_static.gtfs_active_service_dates_mv asd
@@ -84,7 +82,6 @@ class DelayPredictionRepository:
             SELECT
                 na.route_id,
                 na.service_id,
-                na.arrival_day_offset,
                 na.next_arrival_timestamp as next_arrival_time,
                 trip.trip_id,
                 trip.direction_id,
@@ -95,7 +92,6 @@ class DelayPredictionRepository:
             FROM stop_times_filtered stf
             INNER JOIN next_arrivals na
                 ON stf.arrival_time = na.next_arrival_time
-                AND stf.arrival_day_offset = na.arrival_day_offset
             INNER JOIN gtfs_static.gtfs_trips_static trip
                 ON trip.trip_id = stf.trip_id
                 AND trip.trip_headsign = na.trip_headsign
