@@ -11,7 +11,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from config import config
+from src.config import config
 
 class DatabaseConnector:
     def __init__(self, database_url=None):
@@ -21,7 +21,7 @@ class DatabaseConnector:
             database_url = self.db_config.database_url
         else:
             # カスタムURLが指定された場合は一時的な設定を作成
-            from config import DatabaseConfig
+            from src.config import DatabaseConfig
             self.db_config = DatabaseConfig()
             # カスタムURLで上書き
             if database_url.startswith('postgres://'):

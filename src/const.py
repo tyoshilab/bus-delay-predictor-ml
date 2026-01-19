@@ -4,13 +4,12 @@ import os
 DATA_DIR = 'data'
 
 # Subdirectories
-BASE_DATA_DIR = os.path.join(DATA_DIR, 'base_data')
-PROCESSED_DATA_DIR = os.path.join(DATA_DIR, 'processed_data')
-SPLITTED_DATA_DIR = os.path.join(DATA_DIR, 'splitted_data')
-RAW_DATA_DIR = os.path.join(DATA_DIR, 'raw_data')
+PROCESSED_DATA_DIR = os.path.join(DATA_DIR, 'processed')
+SPLITTED_DATA_DIR = os.path.join(DATA_DIR, 'splitted')
+RAW_DATA_DIR = os.path.join(DATA_DIR, 'raw')
 
 # Weather Data
-WEATHER_DATA_DIR = os.path.join(DATA_DIR, 'weather_data')
+WEATHER_DATA_DIR = os.path.join(DATA_DIR, 'weather')
 WEATHER_RAW_DIR = os.path.join(WEATHER_DATA_DIR, 'raw')
 WEATHER_FULL_DIR = os.path.join(WEATHER_DATA_DIR, 'full')
 
