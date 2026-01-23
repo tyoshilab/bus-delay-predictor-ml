@@ -1,7 +1,10 @@
 import os
 
+# Project Root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Root Data Directory
-DATA_DIR = 'data'
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
 # Subdirectories
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, 'processed')
