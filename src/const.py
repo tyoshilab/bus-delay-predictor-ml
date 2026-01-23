@@ -17,7 +17,9 @@ WEATHER_RAW_DIR = os.path.join(WEATHER_DATA_DIR, 'raw')
 WEATHER_FULL_DIR = os.path.join(WEATHER_DATA_DIR, 'full')
 
 # GTFS Data
-GTFS_STATIC_DIR = os.path.join(DATA_DIR, 'google_transit')
+GTFS_REALTIME_DIR = os.path.join(RAW_DATA_DIR, 'GTFS_realtime')
+GTFS_STATIC_DIR = os.path.join(RAW_DATA_DIR, 'GTFS_static')
+ROUTES_TXT = os.path.join(GTFS_STATIC_DIR, 'routes.txt')
 STOPS_TXT = os.path.join(GTFS_STATIC_DIR, 'stops.txt')
 TRIPS_TXT = os.path.join(GTFS_STATIC_DIR, 'trips.txt')
 STOP_TIMES_TXT = os.path.join(GTFS_STATIC_DIR, 'stop_times.txt')

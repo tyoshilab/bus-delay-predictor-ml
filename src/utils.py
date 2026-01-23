@@ -342,7 +342,7 @@ def load_saved_tensors(split_dir: str = const.SPLITTED_DATA_DIR) -> Optional[dic
 
 def load_data(type: str = 'base') -> Optional[pd.DataFrame]:
     """Load the base datasets from /workspace/notebook"""
-    base_path = os.path.join(const.DATA_DIR, f'{type}_data')
+    base_path = const.GTFS_REALTIME_DIR
     # Check if files exist, otherwise try to find them or warn
     base_df = pd.DataFrame()
     for file in os.listdir(base_path):
