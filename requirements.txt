@@ -17,3 +17,5 @@ googlemaps
 sqlalchemy
 psycopg2-binary
 ipykernel
+pytest
+pytest-cov
