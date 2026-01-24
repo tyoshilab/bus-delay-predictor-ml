@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from typing import List, Optional
-import utils
+from src import utils
 
 
 class DataAggregator:

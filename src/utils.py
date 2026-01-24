@@ -1,6 +1,6 @@
 
 import os
-import const
+from src import const
 import json
 import glob
 from datetime import datetime
@@ -393,7 +393,7 @@ def load_split_data_with_combined(
     >>> if df_process is not None:
     ...     print(f"Total samples: {len(df_process)}")
     """
-    from data_splitter import load_split_data, print_split_info
+    from data_process.split import load_split_data, print_split_info
 
     train_file = f'{split_data_dir}/train.{format}'
 
