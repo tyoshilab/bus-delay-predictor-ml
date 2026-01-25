@@ -19,3 +19,5 @@ psycopg2-binary
 ipykernel
 pytest
 pytest-cov
+ipywidgets
+statsmodels
