@@ -12,9 +12,10 @@ SPLITTED_DATA_DIR = os.path.join(DATA_DIR, 'splitted')
 RAW_DATA_DIR = os.path.join(DATA_DIR, 'raw')
 
 # Weather Data
-WEATHER_DATA_DIR = os.path.join(DATA_DIR, 'weather')
-WEATHER_RAW_DIR = os.path.join(WEATHER_DATA_DIR, 'raw')
-WEATHER_FULL_DIR = os.path.join(WEATHER_DATA_DIR, 'full')
+WEATHER_DIR = os.path.join(DATA_DIR, 'weather') # Keeps compatibility if used elsewhere, but ideally redundant
+WEATHER_RAW_DIR = os.path.join(RAW_DATA_DIR, 'weather')
+WEATHER_PROCESSED_DIR = os.path.join(PROCESSED_DATA_DIR, 'weather')
+WEATHER_FULL_DIR = os.path.join(WEATHER_PROCESSED_DIR, 'full') # Assuming full meant processed/full or just processed
 
 # GTFS Data
 GTFS_REALTIME_DIR = os.path.join(RAW_DATA_DIR, 'GTFS_realtime')
