@@ -12,13 +12,14 @@ class Split:
         self.df_test = pd.DataFrame()
         self.split_info = ''
         self.train_size = train_size
-        self.output_dirr = const.PROCESSED_DATA_DIR
+        self.output_dirr = const.SPLITTED_DATA_DIR
 
     def split_time_series(
         self,
         df: pd.DataFrame
     ) -> None:
 
+        df_size = len(df)
         unique_dates = sorted(df['start_date'].unique())
         n_dates = len(unique_dates)
 
@@ -30,6 +31,8 @@ class Split:
         self.df_train = df[df['start_date'].isin(train_dates)].copy()
         self.df_test = df[df['start_date'].isin(test_dates)].copy()
 
+        del df
+
         self.split_info = {
             'train_dates': list(train_dates),
             'test_dates': list(test_dates),
@@ -37,8 +40,8 @@ class Split:
             'test_date_range': (test_dates[0], test_dates[-1]) if test_dates else None,
             'train_samples': len(self.df_train),
             'test_samples': len(self.df_test),
-            'train_ratio_actual': len(self.df_train) / len(df),
-            'test_ratio_actual': len(self.df_test) / len(df),
+            'train_ratio_actual': len(self.df_train) / df_size,
+            'test_ratio_actual': len(self.df_test) / df_size,
         }
 
 
