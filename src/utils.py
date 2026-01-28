@@ -340,10 +340,59 @@ def load_saved_tensors(split_dir: str = const.SPLITTED_DATA_DIR) -> Optional[dic
     }
 
 
-def load_data(type: str = 'base') -> Optional[pd.DataFrame]:
+def save_model_input(
+    X_delays_train, X_features_train, X_agg_train, y_train,
+    X_delays_test, X_features_test, X_agg_test, y_test,
+    data_info: dict,
+    output_dir: str = const.SPLITTED_DATA_DIR
+) -> None:
+    """
+    Save model input tensors and metadata.
+    """
+    output_dir = const.SPLITTED_DATA_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    n_past_trips = data_info.get('n_past_trips', 5)
+    lag_label = f'{n_past_trips}lag'
+
+    train_file = f'train_{lag_label}_{timestamp}.npz'
+    test_file = f'test_{lag_label}_{timestamp}.npz'
+    meta_file = f'meta_{lag_label}_{timestamp}.json'
+
+    train_path = os.path.join(output_dir, train_file)
+    test_path = os.path.join(output_dir, test_file)
+    meta_path = os.path.join(output_dir, meta_file)
+
+    np.savez_compressed(
+        train_path,
+        X_delays=X_delays_train,
+        X_features=X_features_train,
+        X_agg=X_agg_train,
+        y=y_train
+    )
+    np.savez_compressed(
+        test_path,
+        X_delays=X_delays_test,
+        X_features=X_features_test,
+        X_agg=X_agg_test,
+        y=y_test
+    )
+
+    metadata = data_info.copy()
+    metadata.update({
+        'train_file': train_file,
+        'test_file': test_file
+    })
+    
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+    print(f"Saved train tensors and metadata")
+
+
+def load_data(base_path: str = const.GTFS_REALTIME_DIR) -> Optional[pd.DataFrame]:
     """Load the base datasets from /workspace/notebook"""
-    base_path = const.GTFS_REALTIME_DIR
-    # Check if files exist, otherwise try to find them or warn
     base_df = pd.DataFrame()
     for file in os.listdir(base_path):
         if file.endswith('.parquet'):
@@ -364,78 +413,32 @@ def load_data(type: str = 'base') -> Optional[pd.DataFrame]:
 # Common Data Loading Functions (Shared across 03~07 notebooks)
 # =============================================================================
 
-def load_split_data_with_combined(
-    split_data_dir: str = const.PROCESSED_DATA_DIR,
-    format: str = 'parquet'
-) -> tuple:
+def load_split_data_with_combined() -> tuple:
     """
     Load train/valid/test splits and return combined df_process.
-
-    This function consolidates the common data loading pattern used in
-    notebooks 03~07.
-
-    Parameters
-    ----------
-    split_data_dir : str
-        Directory containing split data files
-    format : str
-        File format ('parquet' or 'csv')
-
-    Returns
-    -------
-    tuple : (df_train, df_valid, df_test, df_process, split_info)
-        df_process is the concatenation of all three splits
-        Returns (None, None, None, None, None) if files not found
-
-    Example
-    -------
-    >>> df_train, df_valid, df_test, df_process, split_info = load_split_data_with_combined()
-    >>> if df_process is not None:
-    ...     print(f"Total samples: {len(df_process)}")
     """
-    from data_process.split import load_split_data, print_split_info
-
-    train_file = f'{split_data_dir}/train.{format}'
-
-    if not os.path.exists(train_file):
-        print(f"Split files not found in {split_data_dir}. Please run 02_process_data.ipynb first.")
-        return None, None, None, None, None
-
-    df_train, df_valid, df_test, split_info = load_split_data(split_data_dir, format=format)
-
-    # Ensure start_date is string
-    for df in [df_train, df_valid, df_test]:
-        if 'start_date' in df.columns:
-            df['start_date'] = df['start_date'].astype(str)
+    from src.data_process.split import Split
+    splitter = Split()
+    splitter.output_dirr = const.SPLITTED_DATA_DIR
+    splitter.load_split_data()
 
     # Create combined dataframe
-    df_process = pd.concat([df_train, df_valid, df_test], ignore_index=True)
+    df_train = splitter.df_train
+    df_test = splitter.df_test
+    split_info = splitter.split_info
+    
+    df_process = pd.concat([df_train, df_test], ignore_index=True)
 
     print("Loaded fixed split data:")
-    print_split_info(split_info)
+    splitter.print_split_info()
 
-    return df_train, df_valid, df_test, df_process, split_info
+    return df_train, df_test, df_process, split_info
 
 
 def build_stops_dict(df: pd.DataFrame) -> dict:
     """
     Build stops dictionary from dataframe.
-
     This function consolidates the common stops_dict building pattern.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame containing 'route_direction_key' and 'stop_sequence' columns
-
-    Returns
-    -------
-    dict : {route_direction_key: [sorted stop_sequences]}
-
-    Example
-    -------
-    >>> stops_dict = build_stops_dict(df_process)
-    >>> print(f"Number of route-directions: {len(stops_dict)}")
     """
     stops_dict = {}
     for rd_key in df['route_direction_key'].unique():
@@ -453,35 +456,6 @@ def prepare_model_data(
 ) -> dict:
     """
     Prepare sequences for model training and evaluation.
-
-    This function consolidates the common sequence preparation pattern
-    used in notebooks 03~05, 07.
-
-    Parameters
-    ----------
-    df_train : pd.DataFrame
-        Training data
-    df_test : pd.DataFrame
-        Test data
-    df_process : pd.DataFrame
-        Combined data (for building stops_dict)
-    n_past_trips : int
-        Number of past trips to use for sequences
-    include_train_sequences : bool
-        Whether to create training sequences (set False for evaluation-only)
-
-    Returns
-    -------
-    dict : Dictionary containing:
-        - 'X_delays_train', 'X_features_train', 'X_agg_train', 'y_train' (if include_train_sequences)
-        - 'X_delays_test', 'X_features_test', 'X_agg_test', 'y_test', 'meta_test'
-        - 'stops_dict', 'n_stops'
-
-    Example
-    -------
-    >>> data = prepare_model_data(df_train, df_test, df_process, n_past_trips=5)
-    >>> X_delays_test = data['X_delays_test']
-    >>> y_test = data['y_test']
     """
     # Build stops_dict from combined data
     stops_dict = build_stops_dict(df_process)
