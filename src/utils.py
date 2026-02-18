@@ -425,14 +425,14 @@ def load_split_data_with_combined() -> tuple:
     # Create combined dataframe
     df_train = splitter.df_train
     df_test = splitter.df_test
-    split_info = splitter.split_info
+    # split_info = splitter.split_info
     
     df_process = pd.concat([df_train, df_test], ignore_index=True)
 
     print("Loaded fixed split data:")
-    splitter.print_split_info()
+    # splitter.print_split_info()
 
-    return df_train, df_test, df_process, split_info
+    return df_train, df_test, df_process
 
 
 def build_stops_dict(df: pd.DataFrame) -> dict:
@@ -451,8 +451,7 @@ def prepare_model_data(
     df_train: pd.DataFrame,
     df_test: pd.DataFrame,
     df_process: pd.DataFrame,
-    n_past_trips: int = 5,
-    include_train_sequences: bool = True
+    n_past_trips: int = 5
 ) -> dict:
     """
     Prepare sequences for model training and evaluation.
@@ -467,8 +466,8 @@ def prepare_model_data(
 
     # Create test sequences
     print("Creating test sequences...")
-    X_delays_test, X_features_test, X_agg_test, y_test, meta_test, _, n_stops = \
-        create_trip_based_sequences_multi_route(df_test, n_past_trips, stops_dict=stops_dict)
+    X_delays_test, X_features_test, X_agg_test, y_test, meta_test, n_stops = \
+        create_trip_based_sequences_multi_route(df_test, stops_dict=stops_dict)
 
     result.update({
         'X_delays_test': X_delays_test,
@@ -483,17 +482,16 @@ def prepare_model_data(
         result['n_past_trips'] = X_delays_test.shape[1]
 
     # Create train sequences if needed
-    if include_train_sequences:
-        print("Creating train sequences...")
-        X_delays_train, X_features_train, X_agg_train, y_train, _, _, _ = \
-            create_trip_based_sequences_multi_route(df_train, result['n_past_trips'], stops_dict=stops_dict)
+    print("Creating train sequences...")
+    X_delays_train, X_features_train, X_agg_train, y_train, _, _ = \
+        create_trip_based_sequences_multi_route(df_train,  stops_dict=stops_dict)
 
-        result.update({
-            'X_delays_train': X_delays_train,
-            'X_features_train': X_features_train,
-            'X_agg_train': X_agg_train,
-            'y_train': y_train
-        })
+    result.update({
+        'X_delays_train': X_delays_train,
+        'X_features_train': X_features_train,
+        'X_agg_train': X_agg_train,
+        'y_train': y_train
+    })
 
     return result
 
@@ -534,7 +532,7 @@ def display_and_save_results(
 
     return comparison_df
 
-def create_trip_based_sequences_multi_route(df, n_past_trips=5, stops_dict=None):
+def create_trip_based_sequences_multi_route(df, stops_dict):
     all_X_delays = []
     all_X_features = []
     all_X_agg = []  # 集約特徴量
@@ -560,27 +558,22 @@ def create_trip_based_sequences_multi_route(df, n_past_trips=5, stops_dict=None)
         col for col in df.columns if col.startswith('region_id_')
     )
 
-    feature_cols = base_feature_cols + region_feature_cols
+    weather_cols = ['temperature', 'wind_speed', 'humidex', 'rainfall_amount']
+    available_weather_cols = [c for c in weather_cols if c in df.columns]
+
+    feature_cols = base_feature_cols + region_feature_cols + available_weather_cols
 
     lag_columns = [c for c in df.columns if c.startswith('lag_arrival_delay_')]
     lag_columns = sorted(
         lag_columns,
         key=lambda c: int(c.rsplit('_', 1)[-1]) if c.rsplit('_', 1)[-1].isdigit() else float('inf')
     )
-    use_lag_features = len(lag_columns) > 0
-
-    effective_n_past = min(n_past_trips, len(lag_columns))
+    effective_n_past = len(lag_columns)
     lag_columns = lag_columns[:effective_n_past]
 
     # route_direction_keyごとに処理
     rd_keys = sorted(df['route_direction_key'].unique())
     print(f"Processing {len(rd_keys)} route-direction combinations")
-
-    if stops_dict is None:
-        stops_dict = {}
-        for rd_key in rd_keys:
-            rd_df = df[df['route_direction_key'] == rd_key]
-            stops_dict[rd_key] = sorted(rd_df['stop_sequence'].unique())
 
     # 全route-directionで共通のstops数を使用（パディング用）
     max_stops = max(len(stops) for stops in stops_dict.values())
@@ -600,7 +593,7 @@ def create_trip_based_sequences_multi_route(df, n_past_trips=5, stops_dict=None)
         # Trip単位で時間順にソート
         trip_order = rd_df.groupby('trip_key')['scheduled_arrival_time'].min().sort_values().index.tolist()
 
-        if not use_lag_features and len(trip_order) <= effective_n_past:
+        if len(trip_order) <= effective_n_past:
             continue
 
         # 1. 遅延パターン (trip x stop)
@@ -611,31 +604,25 @@ def create_trip_based_sequences_multi_route(df, n_past_trips=5, stops_dict=None)
         delay_pivot = delay_pivot.reindex(index=trip_order, columns=stops).ffill(axis=1).fillna(0)
         delay_values = pad_to_max(delay_pivot.values, n_stops)
 
-        if use_lag_features:
-            lag_tensor_list = []
-            for col in lag_columns:
-                lag_pivot = rd_df.pivot_table(
-                    index='trip_key', columns='stop_sequence',
-                    values=col, aggfunc='first'
-                )
-                lag_pivot = lag_pivot.reindex(index=trip_order, columns=stops).fillna(0)
-                lag_values = pad_to_max(lag_pivot.values, n_stops)
-                lag_tensor_list.append(lag_values)
-            lag_tensor = np.stack(lag_tensor_list, axis=1)  # (num_trips, effective_n_past, max_stops)
-        else:
-            lag_tensor = None
+        lag_tensor_list = []
+        for col in lag_columns:
+            lag_pivot = rd_df.pivot_table(
+                index='trip_key', columns='stop_sequence',
+                values=col, aggfunc='first'
+            )
+            lag_pivot = lag_pivot.reindex(index=trip_order, columns=stops).fillna(0)
+            lag_values = pad_to_max(lag_pivot.values, n_stops)
+            lag_tensor_list.append(lag_values)
+        lag_tensor = np.stack(lag_tensor_list, axis=1)  # (num_trips, effective_n_past, max_stops)
 
         # 2. 時間・天候・アラート特徴量 + route_direction_encoded
         trip_features = rd_df.groupby('trip_key')[feature_cols + ['route_direction_encoded']].first()
         trip_features = trip_features.reindex(index=trip_order).fillna(0)
 
         # シーケンス作成
-        start_idx = 0 if use_lag_features else effective_n_past
+        start_idx = effective_n_past
         for i in range(start_idx, len(trip_order)):
-            if use_lag_features:
-                past_delays = lag_tensor[i]
-            else:
-                past_delays = delay_values[i-effective_n_past:i]
+            past_delays = lag_tensor[i]
 
             # 予測対象便の特徴量
             target_features = trip_features.iloc[i].values  # (n_features,)
@@ -666,4 +653,4 @@ def create_trip_based_sequences_multi_route(df, n_past_trips=5, stops_dict=None)
     print(f"Total X_agg shape: {X_agg.shape}")
     print(f"Total y shape: {y.shape}")
 
-    return X_delays, X_features, X_agg, y, all_meta, stops_dict, max_stops
+    return X_delays, X_features, X_agg, y, all_meta, max_stops
